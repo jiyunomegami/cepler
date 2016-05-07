@@ -19,6 +19,8 @@ run: FORCE
 	./run
 run-game: FORCE
 	echo '(cepler:start-game)' |./run
+run-game-1536x864: FORCE
+	echo '(cepler:start-game :width 1536 :height 864)' |./run
 FORCE:
 
 clean-fasls:

@@ -1278,8 +1278,8 @@
       (if *is-fullscreen*
           (progn
             (sdl2:show-cursor)
-            (set-original-window-size)
-            (sdl2:set-window-fullscreen jungl::*gl-window* nil))
+            (sdl2:set-window-fullscreen jungl::*gl-window* nil)
+            (set-original-window-size))
           (progn
             (unless *targeting*
               (sdl2:hide-cursor))
@@ -1553,6 +1553,7 @@
 (defvar *original-width* 640)
 (defvar *original-height* 480)
 (defun set-original-window-size ()
+  (format t "original width/height: ~S/~S~%" *original-width* *original-height*)
   (sdl2:set-window-size jungl::*gl-window* *original-width* *original-height*))
 
 (defvar *loaded-ft* nil)
