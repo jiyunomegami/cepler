@@ -565,7 +565,7 @@
    (fuel-remaining
     :initarg :fuel-remaining
     :accessor fuel-remaining
-    :initform 100)))
+    :initform 200)))
 
 (defmethod compute-gravity ((obj vessel))
   (loop for other-obj in *all-objs* do
@@ -617,8 +617,8 @@
                   (other-radius (* radius-factor (slot-value other-obj 'radius))))
              (let ((dxsq (square (- (v:x other-pos) (v:x obj-pos))))
                    (dysq (square (- (v:y other-pos) (v:y obj-pos))))
-                   (dzsq 0
-                     #+nil
+                   (dzsq
+                     #+nil 0
                      (square (- (v:z other-pos) (v:z obj-pos))))
                    (sumradsq (square (+ obj-radius other-radius))))
                #+nil
@@ -626,7 +626,7 @@
                  (format t "test earth: ~A  ~A~%" (+ dxsq dysq dzsq) sumradsq))
                (when (<= (+ dxsq dysq dzsq) sumradsq)
                  ;;(format t "collision ~A - ~A~%" (slot-value obj 'name) (slot-value other-obj 'name))
-                 (setf (v:z obj-pos) (v:z other-pos))
+                 ;;(setf (v:z obj-pos) (v:z other-pos))
                  (setq *hit-other* other-obj)
                  (when (eq other-obj *sun*)
                    (setq *hit-sun* t))
@@ -648,7 +648,7 @@
 (defvar *gl-pluto* nil)
 (defvar *pluto-copies* 0)
 
-(defun add-planet (&optional position)
+(defun add-planet (&optional position relative-p)
   (let* ((sun-pos (slot-value *sun* 'pos))
          (earth-pos (slot-value *earth* 'pos))
          (earth-vel (slot-value *earth* 'vel))
@@ -667,15 +667,15 @@
       (when *vessel*
         (let* ((vessel-pos (slot-value *vessel* 'pos))
                (thrust (if position
-                          (v3:*s (v3:normalize (v3:- position vessel-pos))
+                           (v3:*s (if relative-p
+                                      position
+                                      (v3:normalize (v3:- position vessel-pos)))
                                  (coerce (* thrust-factor (* 0.5 mass)) 'single-float))
                           (v! 0 0 0))))
           (setf (thrust *vessel*) thrust))
         (return-from add-planet))
       (stop-sound :intro)
       (play-sound :add-planet)
-      (when (> (v:z (pos *camera*)) 20.0)
-        (setf (v:z (pos *camera*)) 20.0))
       (let* ((name (format nil "Pluto ~D" (incf *pluto-copies*)))
              (vel earth-vel)
              (radius 1185000d0) ;; pluto

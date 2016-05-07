@@ -1073,20 +1073,26 @@
                    (v! x y z)))
              (obj-pos (v3:+ rp (slot-value *sun* 'pos))))
         ;;(format t "OBJ-POS: ~A~%" obj-pos)
+        (unless *vessel*
+          (when (> (v:z (pos *camera*)) 20.0)
+            (setf (v:z (pos *camera*)) 20.0)))
         (add-planet obj-pos))
       (values ray tti p))))
 
 (defun %mouse-callback (event timestamp)
   (declare (ignore timestamp))
-  (when event
+  (when (and event (not *paused*))
     (when (or (skitter:mouse-down-p 1) (skitter:mouse-down-p 2)) ;; left button is 1 on my system
       (unless *vessel*
         (setq *hit-sun* nil
               *show-help* nil
               *hit-other* nil))
-      (when (and *targeting* (not *paused*))
-        (let ((d (skitter:xy-pos-vec event)))
-          (target d)))))
+      (if *targeting*
+          (let ((d (skitter:xy-pos-vec event)))
+            (target d))
+          (progn
+            (add-planet)
+            (follow *vessel*)))))
   (unless *targeting*
     (mouse-pov event)))
 
@@ -1095,10 +1101,19 @@
 
 (defvar *last-followed* nil)
 
+(defun follow (obj)
+  (setq *following* obj)
+  (when *following*
+    (setq *camera-text* (format nil "Following ~A~A"
+                                (slot-value *following* 'name)
+                                (if *follow-sun-lock* "-Sun" "")))
+    (camera-follow-start *following*)))
+
 (defun unfollow ()
   (when *following*
     (setq *last-followed* *following*)
-    (setq *following* nil)))
+    (setq *following* nil)
+    (setq *camera-text* "")))
 
 (defun camera-change (name &optional (up (v! 0.0 0.0 1.0)))
   (setf (fov *camera*) (coerce (/ pi 3) 'single-float))
@@ -1290,6 +1305,8 @@
       (setq *targeting* (not *targeting*))
       (when (and (not *targeting*) *is-fullscreen*)
         (sdl2:hide-cursor))
+      (when (and (not *targeting*) *vessel*)
+        (follow *vessel*))
       (when *targeting*
         (camera-5)
         (sdl2:show-cursor)))
@@ -1331,27 +1348,15 @@
               (setq next (car (last *all-objs*))))
             (unless next
               (setq next *mercury*))
-            (setq *following* next)
-            (setq *camera-text* (format nil "Following ~A~A"
-                                            (slot-value *following* 'name)
-                                            (if *follow-sun-lock* "-Sun" "")))
-            (camera-follow-start *following*)))))
-          
+            (follow next)))))
 
     (when (skitter:key-down-p key.f)
       (unless *targeting*
         (if *following*
-            (progn
-              (unfollow)
-              (setq *camera-text* ""))
-            (progn (setq *following*
-                         (if (and *last-followed* (find *last-followed* *all-objs*))
-                             *last-followed*
-                             *earth*))
-                   (setq *camera-text* (format nil "Following ~A~A"
-                                               (slot-value *following* 'name)
-                                               (if *follow-sun-lock* "-Sun" "")))
-                   (camera-follow-start *following*))))))
+            (unfollow)
+            (follow (if (and *last-followed* (find *last-followed* *all-objs*))
+                        *last-followed*
+                        *earth*))))))
 
   (when (skitter:key-down-p key.z)
     (incf (fov *camera*) rtg-math.base-maths:+one-degree-in-radians+))
@@ -1377,24 +1382,49 @@
         (camera (if (and *following* *follow-camera*)
                     *follow-camera*
                     *camera*)))
-    (when (skitter:key-down-p key.w)
-      (let ((change (v3:*s (dir *camera*)
-                           movement-scale)))
-        (setf (pos camera) (v3:+ (pos camera) change))))
-    (when (skitter:key-down-p key.s)
-      (let ((change (v3:*s (dir *camera*)
-                           (* -1.0 movement-scale))))
-        (setf (pos camera) (v3:+ (pos camera) change))))
-    (when (skitter:key-down-p key.a)
-      (let* ((rotm (m4:rotation-from-axis-angle (world-up *camera*) (* 1 (coerce (/ pi 2) 'single-float))))
-             (left-dir (m4:*v3 rotm (dir *camera*)))
-             (change (v3:*s left-dir movement-scale)))
-        (setf (pos camera) (v3:+ (pos camera) change))))
-    (when (skitter:key-down-p key.d)
-      (let* ((rotm (m4:rotation-from-axis-angle (world-up *camera*) (* -1 (coerce (/ pi 2) 'single-float))))
-             (right-dir (m4:*v3 rotm (dir *camera*)))
-             (change (v3:*s right-dir movement-scale)))
-        (setf (pos camera) (v3:+ (pos camera) change)))))
+    (if (and *following* (eq *following* *vessel*))
+        (labels ((thrust ()
+                   (setf (reverse-thrust *vessel*) nil)
+                   (when (> (fuel-remaining *vessel*) 0)
+                     (decf (fuel-remaining *vessel*) (fps-multiplier 10))
+                     (when (<= (fuel-remaining *vessel*) 0)
+                       (setf (fuel-remaining *vessel*) +0.0))
+                     (incf (fuel *vessel*)))))
+          (when (skitter:key-down-p key.w)
+            (thrust)
+            (add-planet (dir *camera*) t))
+          (when (skitter:key-down-p key.s)
+            (thrust)
+            (add-planet (v3:*s (dir *camera*) -1.0) t))
+          (when (skitter:key-down-p key.a)
+            (let* ((rotm (m4:rotation-from-axis-angle (world-up *camera*) (* 1 (coerce (/ pi 2) 'single-float))))
+                   (left-dir (m4:*v3 rotm (dir *camera*))))
+              (thrust)
+              (add-planet left-dir t)))
+          (when (skitter:key-down-p key.d)
+            (let* ((rotm (m4:rotation-from-axis-angle (world-up *camera*) (* -1 (coerce (/ pi 2) 'single-float))))
+                   (right-dir (m4:*v3 rotm (dir *camera*))))
+              (thrust)
+              (add-planet right-dir t))))
+        (progn
+          (when (skitter:key-down-p key.w)
+            (let ((change (v3:*s (dir *camera*)
+                                 movement-scale)))
+              (setf (pos camera) (v3:+ (pos camera) change))))
+          (when (skitter:key-down-p key.s)
+            (let ((change (v3:*s (dir *camera*)
+                                 (* -1.0 movement-scale))))
+              (setf (pos camera) (v3:+ (pos camera) change))))
+          (when (skitter:key-down-p key.a)
+            (let* ((rotm (m4:rotation-from-axis-angle (world-up *camera*) (* 1 (coerce (/ pi 2) 'single-float))))
+                   (left-dir (m4:*v3 rotm (dir *camera*)))
+                   (change (v3:*s left-dir movement-scale)))
+              (setf (pos camera) (v3:+ (pos camera) change))))
+          (when (skitter:key-down-p key.d)
+            (let* ((rotm (m4:rotation-from-axis-angle (world-up *camera*) (* -1 (coerce (/ pi 2) 'single-float))))
+                   (right-dir (m4:*v3 rotm (dir *camera*)))
+                   (change (v3:*s right-dir movement-scale)))
+              (setf (pos camera) (v3:+ (pos camera) change)))))))
 
   #+nil
   (progn
@@ -1473,12 +1503,20 @@
     (step-gl)
     (%keyboard-callback nil nil)
     (update-console)
+    (when (and *gl-pluto* (> (v3:length (box-pos (gl-planet-box *gl-pluto*))) 800))
+      ;; too far away
+      (when *vessel*
+        (setf (slot-value *vessel* 'pos) (v! 0 0 0)))
+      (setf (box-pos (gl-planet-box *gl-pluto*)) (v! 0 0 0))
+      (setq *colliding* *sun*
+            *hit-sun* t))
     (when *colliding*
       (cond
         (*hit-sun*
          (play-sound :hit-sun))
         (*hit-other*
          (play-sound :hit-other)))
+      (unfollow)
       (reset-planets))
     (when (or *hit-sun* *hit-other*)
       (setq *scrolling-help* nil)
