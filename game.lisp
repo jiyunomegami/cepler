@@ -938,11 +938,11 @@
          (render-text-faster #.(format nil
                                        #.(concatenate
                                           'string
-                                          "KEYS:       ESC: toggle game mode  `: toggle fullscreen  space or p: pause~%"
-                                          "                 x: start over   w/s/a/d: camera movement   h: toggle help display~%"
-                                          "~%                   Normal (non-game) Mode:~%"
+                                          "KEYS:      ESC: toggle POV  `: toggle fullscreen  space or p: pause~%"
+                                          "    overhead mode:  x: start over   w/s/a/d: move camera   h: toggle help~%"
+                                          "    normal mode: ~%"
                                           "              1-5: switch camera    f: follow planets (TAB: switch, g: sun lock, x: view direction)~%"
-                                          "~%                   Movement (disabled while following):~%"
+                                          "~%                   Movement:~%"
                                           "              w: forward   s: backward   a: left   d: right   Hold left shift for speed boost.~%"
                                           "~%                         Simulation:~%"
                                           "              v: toggle VSOP87     q/e: change speed (step)     r: reset~%"
@@ -1237,7 +1237,7 @@
               (decf (fuel-remaining *vessel*) (fps-multiplier 10))
               (when (<= (fuel-remaining *vessel*) 0)
                 (setf (fuel-remaining *vessel*) +0.0))
-              (incf (fuel *vessel*))))
+              (incf (fuel *vessel*) (if (skitter:key-down-p key.lshift) 2 1))))
           (setf (reverse-thrust *vessel*) t)))
       (when (or (skitter:mouse-down-p 1) (skitter:mouse-down-p 2)) ;; left button is 1 on my system
         (when *vessel*
@@ -1245,9 +1245,9 @@
             (decf (fuel-remaining *vessel*) (fps-multiplier 10))
             (when (<= (fuel-remaining *vessel*) 0)
               (setf (fuel-remaining *vessel*) +0.0))
-            (incf (fuel *vessel*)))
-          #+nil
-          (format t "fuel: ~A~%" (fuel *vessel*))))))
+            (incf (fuel *vessel*) (if (skitter:key-down-p key.lshift) 2 1)))))))
+
+  ;;(when *vessel* (format t "fuel: ~S~%" (fuel *vessel*)))
 
   (when event
     (when (skitter:key-down-p key.1)
@@ -1389,7 +1389,7 @@
                      (decf (fuel-remaining *vessel*) (fps-multiplier 10))
                      (when (<= (fuel-remaining *vessel*) 0)
                        (setf (fuel-remaining *vessel*) +0.0))
-                     (incf (fuel *vessel*)))))
+                     (incf (fuel *vessel*) (if (skitter:key-down-p key.lshift) 2 1)))))
           (when (skitter:key-down-p key.w)
             (thrust)
             (add-planet (dir *camera*) t))
