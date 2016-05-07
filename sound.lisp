@@ -29,20 +29,20 @@
                 buffer)))))
 
 (defvar *al-interval* (/ 1 40))
-(defvar *al-sources* 8)
+(defvar *al-sources* 16)
 (defvar *al-playing* (make-array *al-sources*
                                  :initial-contents (make-list *al-sources*)))
 
 (defun sound-step (sources)
   (let ((n 0))
-    (when *stop-sound-queue*
-      (let ((file (pop *stop-sound-queue*)))
-        (dotimes (i (length *al-playing*))
-          (let ((playing (aref *al-playing* i)))
-            (when playing
-              (when (string= playing file)
-                (let ((source (nth i sources)))
-                  (al:source-stop source))))))))
+    (loop while *stop-sound-queue* do
+         (let ((file (pop *stop-sound-queue*)))
+           (dotimes (i (length *al-playing*))
+             (let ((playing (aref *al-playing* i)))
+               (when playing
+                 (when (string= playing file)
+                   (let ((source (nth i sources)))
+                     (al:source-stop source))))))))
     (dolist (source sources)
       (let ((state (cl-openal:get-source source :source-state)))
         ;;(format t "source ~A ~S~%" n state)
@@ -77,18 +77,19 @@
 (defun init-sound ()
   (alut:with-init
     (alc:with-device (device)
-      ;; Here it is appropriate to check so
-      ;; device is actually opened. GET-ERROR
-      ;; for example.
-      (alc:with-context (context device)
-        (alc:make-context-current context)
-        (al:with-sources (*al-sources* sources)
-          (loop
-             (bt:with-lock-held (*sound-lock*)
-               (sound-step sources)
-               (bt:condition-wait *sound-condition* *sound-lock*)
-               ;;(sleep *al-interval*)
-               )))))))
+      (when device
+        (when (eq (cl-openal-alc:get-error device) :no-error)
+          (alc:with-context (context device)
+            (alc:make-context-current context)
+            (al:with-sources (*al-sources* sources)
+              (loop
+                 (let ((step-required
+                        (bt:with-lock-held (*sound-lock*)
+                          (or *stop-sound-queue* *sound-queue*))))
+                   (bt:with-lock-held (*sound-lock*)
+                     (if step-required
+                         (sound-step sources)
+                         (bt:condition-wait *sound-condition* *sound-lock*))))))))))))
 
 (defvar *sound-thread* nil)
 
