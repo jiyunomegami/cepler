@@ -1220,12 +1220,16 @@
           (unless (skitter:mouse-down-p 1)
             (when (> (fuel-remaining *vessel*) 0)
               (decf (fuel-remaining *vessel*) (fps-multiplier 10))
+              (when (<= (fuel-remaining *vessel*) 0)
+                (setf (fuel-remaining *vessel*) +0.0))
               (incf (fuel *vessel*))))
           (setf (reverse-thrust *vessel*) t)))
       (when (skitter:mouse-down-p 1) ;; left button
         (when *vessel*
           (when (> (fuel-remaining *vessel*) 0)
             (decf (fuel-remaining *vessel*) (fps-multiplier 10))
+            (when (<= (fuel-remaining *vessel*) 0)
+              (setf (fuel-remaining *vessel*) +0.0))
             (incf (fuel *vessel*)))
           #+nil
           (format t "fuel: ~A~%" (fuel *vessel*))))))
