@@ -46,6 +46,8 @@
 ;;; It relies heavily on the fact that the VSOP87 data files
 ;;; have a well defined structure, laid out in vsop87.doc.
 (defun vsop87-file-reader (filename)
+  (if (not (probe-file filename))
+      (return-from vsop87-file-reader nil))
   (with-open-file (file filename)        
     (let ((variable-to-series-set-plist ()))
       (loop for line = (read-line file nil) while line do

@@ -352,7 +352,10 @@
     :initform ()
     :initarg :z-series-set)))
 
-(defvar *use-vsop* t)
+(defvar *vsop-available* nil)
+(when *vsop-series-set-sun-x*
+  (setq *vsop-available* t))
+(defvar *use-vsop* *vsop-available*)
 
 ;;; This function hijacks the inherited behavior completely. See above.
 (defmethod compute-forces :around ((obj vsop-body) dt)
@@ -482,6 +485,45 @@
                                  :name "Pluto"
                                  :mass 1.46d22
                                  :radius 1185000d0))
+
+(defun output-initial-conditions ()
+  (dolist (obj *all-objs*)
+    (format t "(setf (slot-value *~A* 'pos) (make-array 3 :element-type 'single-float :initial-contents '~A))~%"
+            (string-downcase (slot-value obj 'name)) (subseq (princ-to-string (slot-value obj 'pos)) 1))
+    (format t "(setf (slot-value *~A* 'vel) (make-array 3 :element-type 'single-float :initial-contents '~A))~%"
+            (string-downcase (slot-value obj 'name)) (subseq (princ-to-string (slot-value obj 'vel)) 1))
+    (format t "(setf (slot-value *~A* 'acc) (make-array 3 :element-type 'single-float :initial-contents '~A))~%"
+            (string-downcase (slot-value obj 'name)) (subseq (princ-to-string (slot-value obj 'acc)) 1))))
+
+(unless *vsop-available*
+  (setf (slot-value *sun* 'pos) (make-array 3 :element-type 'single-float :initial-contents '(5.613398e8 3.441153e8 -2.4341866e7)))
+  (setf (slot-value *sun* 'vel) (make-array 3 :element-type 'single-float :initial-contents '(-0.77037036 12.192593 -0.01111111)))
+  (setf (slot-value *sun* 'acc) (make-array 3 :element-type 'single-float :initial-contents '(-0.0033476225 0.052139346 -6.769404e-6)))
+  (setf (slot-value *mercury* 'pos) (make-array 3 :element-type 'single-float :initial-contents '(-4.6073074e10 -4.8134705e10 2.9274704e8)))
+  (setf (slot-value *mercury* 'vel) (make-array 3 :element-type 'single-float :initial-contents '(25329.777 -31793.303 -4924.311)))
+  (setf (slot-value *mercury* 'acc) (make-array 3 :element-type 'single-float :initial-contents '(111.86081 -132.21169 -21.070786)))
+  (setf (slot-value *venus* 'pos) (make-array 3 :element-type 'single-float :initial-contents '(9.495007e10 5.336011e10 -4.7442555e9)))
+  (setf (slot-value *venus* 'vel) (make-array 3 :element-type 'single-float :initial-contents '(-17360.592 30616.65 1422.2222)))
+  (setf (slot-value *venus* 'acc) (make-array 3 :element-type 'single-float :initial-contents '(-75.97586 129.9587 6.1657295)))
+  (setf (slot-value *earth* 'pos) (make-array 3 :element-type 'single-float :initial-contents '(-1.0015065e11 -1.12187924e11 -1.9332464e7)))
+  (setf (slot-value *earth* 'vel) (make-array 3 :element-type 'single-float :initial-contents '(21864.297 -20112.117 4.0939813)))
+  (setf (slot-value *earth* 'acc) (make-array 3 :element-type 'single-float :initial-contents '(94.20174 -85.26537 0.0039261295)))
+  (setf (slot-value *mars* 'pos) (make-array 3 :element-type 'single-float :initial-contents '(-1.3356941e11 -1.86917e11 -6.566353e8)))
+  (setf (slot-value *mars* 'vel) (make-array 3 :element-type 'single-float :initial-contents '(20753.066 -12109.748 -760.7704)))
+  (setf (slot-value *mars* 'acc) (make-array 3 :element-type 'single-float :initial-contents '(88.994896 -51.426502 -3.2615151)))
+  (setf (slot-value *jupiter* 'pos) (make-array 3 :element-type 'single-float :initial-contents '(-8.060767e11 1.0323881e11 1.7597757e10)))
+  (setf (slot-value *jupiter* 'vel) (make-array 3 :element-type 'single-float :initial-contents '(-1835.6147 -12379.022 94.81481)))
+  (setf (slot-value *jupiter* 'acc) (make-array 3 :element-type 'single-float :initial-contents '(-7.7701325 -53.143703 0.3970736)))
+  (setf (slot-value *saturn* 'pos) (make-array 3 :element-type 'single-float :initial-contents '(-4.6005017e11 -1.4264121e12 4.3110883e10)))
+  (setf (slot-value *saturn* 'vel) (make-array 3 :element-type 'single-float :initial-contents '(8722.963 -3034.074 -285.39258)))
+  (setf (slot-value *saturn* 'acc) (make-array 3 :element-type 'single-float :initial-contents '(37.31285 -12.887792 -1.2576497)))
+  (setf (slot-value *uranus* 'pos) (make-array 3 :element-type 'single-float :initial-contents '(2.796991e12 1.04821463e12 -3.2343153e10)))
+  (setf (slot-value *uranus* 'vel) (make-array 3 :element-type 'single-float :initial-contents '(-2487.9407 6068.148 1.8962963)))
+  (setf (slot-value *uranus* 'acc) (make-array 3 :element-type 'single-float :initial-contents '(-10.525615 26.08578 0.21406493)))
+  (setf (slot-value *neptune* 'pos) (make-array 3 :element-type 'single-float :initial-contents '(4.202885e12 -1.5552007e12 -6.4832774e10)))
+  (setf (slot-value *neptune* 'vel) (make-array 3 :element-type 'single-float :initial-contents '(1820.4445 5157.926 -247.46666)))
+  (setf (slot-value *neptune* 'acc) (make-array 3 :element-type 'single-float :initial-contents '(7.9480567 22.100046 -0.67529947)))
+  )
 
 (defvar *vessel* nil)
 (defvar *colliding* nil)

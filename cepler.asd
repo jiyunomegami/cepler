@@ -23,7 +23,7 @@
                ;;(:file "ft")
                (:file "camera" :depends-on ("package"))
                (:file "vsop87")
-               (:file "planets" :depends-on ("vsop87"))
+               (:file "planets" :depends-on ("vsop87" "camera"))
                (:file "sky" :depends-on ("package"))
                (:file "sound" :depends-on ("package"))
                (:file "game" :depends-on ("camera" "planets" "sky" "sound"))))

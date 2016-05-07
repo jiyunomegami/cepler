@@ -828,6 +828,7 @@
 (defpipeline draw-rings () (g-> #'rings-vert #'rings-frag))
 
 (defun render-rings (gl-planet factor)
+  (declare (ignore factor))
   (let* ((box (gl-planet-box gl-planet))
          (cam-light-vec (v3:- (box-pos box) (pos *light*))))
     (map-g #'draw-rings *rings-stream*
@@ -914,16 +915,17 @@
              (setq *scrolling-help* nil
                    *funky* nil
                    *funky-y* -1.0))
-           (render-text (format nil "PLUTO STRIKES BACK")
-                        :x :center
-                        :y 0.5
-                        :transparency transparency
-                        :color color)
-           (render-text (format nil "Lonely and no longer considered the ninth planet,~% PLUTO launches a daring plan using F = ma.")
-                        ;;:x :left
-                        :y 0.3
-                        :transparency transparency
-                        :color color))
+           (when *funky*
+             (render-text (format nil "PLUTO STRIKES BACK")
+                          :x :center
+                          :y 0.5
+                          :transparency transparency
+                          :color color)
+             (render-text (format nil "Lonely and no longer considered the ninth planet,~% PLUTO launches a daring plan using F = ma.")
+                          ;;:x :left
+                          :y 0.3
+                          :transparency transparency
+                          :color color)))
          (render-text (format nil "CLICK MOUSE BUTTON TO PLAY")
                       :x :center
                       :y 0.0
@@ -1178,7 +1180,7 @@
 (defun reset-sim ()
   (setq *following* nil)
   (setq *camera-text* "")
-  (setq *use-vsop* t)
+  (setq *use-vsop* *vsop-available*)
   (init-gl-planets)
   (init-planets)
   (setq *vessel* nil)
@@ -1258,7 +1260,8 @@
     (when (skitter:key-down-p key.r)
       (reset-sim))
     (when (skitter:key-down-p key.v)
-      (setq *use-vsop* (not *use-vsop*)))
+      (when *vsop-available*
+        (setq *use-vsop* (not *use-vsop*))))
 
     (when (skitter:key-down-p key.h)
       (when *targeting*

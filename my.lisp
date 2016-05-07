@@ -67,9 +67,13 @@
   )
 
 (defun load-game ()
+  (unless (directory "./vsop87/")
+    (format *query-io* "WARNING: vsop87 not available. Initial conditions will be incorrect. Press enter to continue.~%")
+    (force-output *query-io*)
+    (read-line *query-io*))
   (push #p"~/lgj/cepler/" asdf:*central-registry*)
   (asdf:operate 'asdf:load-op :cepler)
-  (load (merge-pathnames "ft.lisp" *game-dir*)))
+  (load "ft.lisp"))
 
 (defun load-using-quicklisp ()
   (format t "using packages from quicklisp only~%"))
