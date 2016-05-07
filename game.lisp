@@ -1079,7 +1079,7 @@
 (defun %mouse-callback (event timestamp)
   (declare (ignore timestamp))
   (when event
-    (when (skitter:mouse-down-p 1) ;; left button
+    (when (or (skitter:mouse-down-p 1) (skitter:mouse-down-p 2)) ;; left button is 1 on my system
       (unless *vessel*
         (setq *hit-sun* nil
               *show-help* nil
@@ -1217,14 +1217,14 @@
         (setf (reverse-thrust *vessel*) nil))
       (when (skitter:mouse-down-p 3) ;; right button
         (when *vessel*
-          (unless (skitter:mouse-down-p 1)
+          (unless (or (skitter:mouse-down-p 1) (skitter:mouse-down-p 2)) ;; left button is 1 on my system
             (when (> (fuel-remaining *vessel*) 0)
               (decf (fuel-remaining *vessel*) (fps-multiplier 10))
               (when (<= (fuel-remaining *vessel*) 0)
                 (setf (fuel-remaining *vessel*) +0.0))
               (incf (fuel *vessel*))))
           (setf (reverse-thrust *vessel*) t)))
-      (when (skitter:mouse-down-p 1) ;; left button
+      (when (or (skitter:mouse-down-p 1) (skitter:mouse-down-p 2)) ;; left button is 1 on my system
         (when *vessel*
           (when (> (fuel-remaining *vessel*) 0)
             (decf (fuel-remaining *vessel*) (fps-multiplier 10))
@@ -1233,12 +1233,6 @@
             (incf (fuel *vessel*)))
           #+nil
           (format t "fuel: ~A~%" (fuel *vessel*))))))
-
-  #+nil
-  (ignore-errors
-    (dotimes (i 5)
-      (when (skitter:mouse-down-p i)
-        (format t "mouse down ~D: ~S~%" i (skitter:mouse-down-p i)))))
 
   (when event
     (when (skitter:key-down-p key.1)
