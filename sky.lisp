@@ -42,7 +42,7 @@
 
 (defun init-sky-data ()
   (let* ((bx (dendrite.primitives:cube-data
-	      :size 2010s0 :normals nil :tex-coords nil))
+	      :size #.(* 10 2010s0) :normals nil :tex-coords nil))
          (data (make-gpu-array (first bx) :element-type :vec3))
          (ind (make-gpu-array
 	       (dendrite.primitives:swap-winding-order (second bx))
