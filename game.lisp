@@ -87,8 +87,6 @@
              (merge-pathnames texture
                               (merge-pathnames dir *game-dir*))))))
 
-(defvar *sun-actual-size* nil)
-
 (defun add-gl-planet (&key
                         (name "")
                         (day 1)
@@ -714,10 +712,7 @@
                                               (let ((box (make-box :pos (v! (v:x (pos *camera*)) (v:y (pos *camera*)) (- (v:z (pos *camera*)) 1)))))
                                                 (model->clip box *camera*))
                                               (m4:*
-                                               (q:to-mat4 (q:from-axis-angle (v! -1 0 0)
-                                                                             (+
-                                                                              (coerce (/ pi 4) 'single-float)
-                                                                              (tan (* (- this-y -0) 0.0)))))
+                                               (q:to-mat4 (q:from-axis-angle (v! -1 0 0) (coerce (/ pi 4) 'single-float)))
                                                (m4:translation (v! this-x this-y 0))))
                                              (m4:translation (v! this-x this-y 0)))
                             :col color
@@ -945,7 +940,7 @@
                                           "~%                   Movement:~%"
                                           "              w: forward   s: backward   a: left   d: right   Hold left shift for speed boost.~%"
                                           "~%                         Simulation:~%"
-                                          "              v: toggle VSOP87     q/e: change speed (step)     r: reset~%"
+                                          "              v: toggle VSOP87    q/e: change speed (step)    r: reset   j: sun actual size toggle~%"
                                           "~%                         Other:~%"
                                           "              l: toggle lighting     z/c: change fov    enter: reset game~%"
                                           "              +/-: change visible size of pluto. Has no effect on collision detection.~%"
@@ -1160,17 +1155,15 @@
          (dir (v3:*s (v3:normalize rel-pos) *follow-direction*))
          (radius (slot-value obj 'radius))
          (gl-radius (coerce (* 1520 (if *sun-actual-size* (/ 5.0 109) 1) *gl-scale* radius) 'single-float))
-         (off (v3:*s (v3:+ (v! 0.0 0.0 (if (< *follow-direction* 0)
-                                           (max (* gl-radius 0.05) 0.5)
-                                           0.0))
-                           (v3:normalize rel-pos))
-                     (* -1 *follow-direction* (max (* gl-radius 1.5)))))
-         (pos (slot-value obj 'pos))
-         (gl-pos (v3:*s pos *gl-scale*)))
+         (off (v3:*s (v3:+ (v! 0.0 0.0 (* 1 (max (* gl-radius 0.05) 0.5)))
+                           (v3:*s dir 1.0))
+                     (* gl-radius 2)))
+         ;;(pos (slot-value obj 'pos))
+         (gl-pos (v3:*s rel-pos *gl-scale*)))
     (when *follow-camera*
       (setq off (v3:+ off (pos *follow-camera*))))
     (when *follow-sun-lock*
-      (setf (dir *camera*) dir)
+      (setf (dir *camera*) (v3:*s dir -1.0))
       (setf (world-up *camera*) (v! 0.0 0.0 1.0)))
     (setf (pos *camera*) (v3:+ gl-pos off))))
 
@@ -1179,7 +1172,7 @@
   (setq *last-followed* obj)
   (let* ((rel-pos (relative-position obj *sun*))
          (dir (v3:*s (v3:normalize rel-pos) *follow-direction*)))
-    (setf (dir *camera*) dir)
+    (setf (dir *camera*) (v3:*s dir -1.0))
     (setf (world-up *camera*) (v! 0.0 0.0 1.0))
     (camera-follow obj)))
 
@@ -1271,13 +1264,25 @@
     (when (skitter:key-down-p key.p)
       (pause))
     (when (skitter:key-down-p key.r)
-      (reset-sim))
+      (unless *paused*
+        (let ((following *following*))
+          (reset-sim)
+          (when following
+            (follow following)))))
+    (when (skitter:key-down-p key.j)
+      (unless *paused*
+        (let ((following *following*))
+          (setq *sun-actual-size* (not *sun-actual-size*))
+          (reset-sim)
+          (when following
+            (follow following)))))
     (when (skitter:key-down-p key.v)
       (when *vsop-available*
         (setq *use-vsop* (not *use-vsop*))))
 
     (when (skitter:key-down-p key.h)
       (when *targeting*
+        (setq *scrolling-help* nil)
         (setq *hide-help* (not *hide-help*))
         (setq *show-help* (not *hide-help*))))
 
@@ -1378,6 +1383,7 @@
                                       (if *follow-sun-lock* "-Sun" ""))))))
   (let ((movement-scale
          (* (if (skitter:key-down-p key.lshift) 10 1)
+            (if *sun-actual-size* #.(/ 5.0 109.0) 1)
             *movement-scale*))
         (camera (if (and *following* *follow-camera*)
                     *follow-camera*

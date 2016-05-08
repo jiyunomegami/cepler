@@ -596,14 +596,18 @@
   (* x x))
 
 ;; detect collisions using the on-screen sizes
+(defvar *sun-actual-size* nil)
 (defparameter *radius-factor* 1000)
 (defparameter *radius-factor-sun* 39)
 
 (defun detect-collisions (obj)
   (setq *colliding* nil)
-  (let* ((obj-pos (slot-value obj 'pos))
-         (obj-radius (* *radius-factor* (slot-value obj 'radius)))
-         (obj-radius-nonsuncmp (* *radius-factor* (slot-value obj 'radius)))
+  (let* ((radius-factor (if *sun-actual-size*
+                            (* *radius-factor* #.(/ 5.0 109.0))
+                            *radius-factor*))
+         (obj-pos (slot-value obj 'pos))
+         (obj-radius (* radius-factor (slot-value obj 'radius)))
+         (obj-radius-nonsuncmp (* radius-factor (slot-value obj 'radius)))
          (obj-radius-suncmp (* *radius-factor-sun* (slot-value obj 'radius))))
     (loop for other-obj in *all-objs* do
          (unless (eq obj other-obj)
@@ -613,7 +617,7 @@
            (let* ((other-pos (slot-value other-obj 'pos))
                   (radius-factor (if (eq *sun* other-obj)
                                      *radius-factor-sun*
-                                     *radius-factor*))
+                                     radius-factor))
                   (other-radius (* radius-factor (slot-value other-obj 'radius))))
              (let ((dxsq (square (- (v:x other-pos) (v:x obj-pos))))
                    (dysq (square (- (v:y other-pos) (v:y obj-pos))))
