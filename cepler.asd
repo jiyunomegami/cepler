@@ -7,7 +7,8 @@
   #+asdf-unicode :encoding
   #+asdf-unicode :utf-8
   :serial t
-  :depends-on (#:cepl.sdl2
+  :depends-on (#:cepl
+               #:cepl.sdl2
                #:dendrite
                #:skitter
                #:cepl.skitter.sdl2

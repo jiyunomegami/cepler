@@ -11,4 +11,8 @@
      #+lispworks conditions:fasl-error
      #-(or sbcl allegro lispworks) error ()
      (asdf:perform (make-instance 'asdf:compile-op) c)
+     (call-next-method))
+    ;; The function JUNGL::%RECOMPILE-GPU-FUNCTION-AND-PIPELINES is undefined.
+    (undefined-function  ()
+     (asdf:perform (make-instance 'asdf:compile-op) c)
      (call-next-method))))
