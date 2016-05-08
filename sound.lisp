@@ -6,14 +6,14 @@
 (defvar *sound-queue* nil)
 (defvar *stop-sound-queue* nil)
 
-(defun play-sound-file (file)
+(defun play-sound-file (key file)
   (bt:with-lock-held (*sound-lock*)
-    (setq *sound-queue* (append *sound-queue* (list file)))
+    (setq *sound-queue* (append *sound-queue* (list (list key file))))
     (bt:condition-notify *sound-condition*)))
 
-(defun stop-sound-file (file)
+(defun stop-sound (key)
   (bt:with-lock-held (*sound-lock*)
-    (setq *stop-sound-queue* (append *stop-sound-queue* (list file)))
+    (setq *stop-sound-queue* (append *stop-sound-queue* (list key)))
     (bt:condition-notify *sound-condition*)))
 
 (defvar *al-buffer-cache* (make-hash-table :test #'equal))
@@ -23,36 +23,37 @@
     (if buffer
         buffer
         (setf (gethash file *al-buffer-cache*)
-              (let ((buffer (alut:create-buffer-from-file
-                             (merge-pathnames file
-                                              (merge-pathnames "sounds/" *game-dir*)))))
-                buffer)))))
+              (alut:create-buffer-from-file file)))))
 
-(defvar *al-interval* (/ 1 40))
 (defvar *al-sources* 16)
 (defvar *al-playing* (make-array *al-sources*
                                  :initial-contents (make-list *al-sources*)))
 
 (defun sound-step (sources)
+  (loop while *stop-sound-queue* do
+       (let ((key (pop *stop-sound-queue*)))
+         (dotimes (i (length *al-playing*))
+           (let ((playing (aref *al-playing* i)))
+             (when playing
+               (when (eq playing key)
+                 (let ((source (nth i sources)))
+                   (al:source-stop source))))))))
   (let ((n 0))
-    (loop while *stop-sound-queue* do
-         (let ((file (pop *stop-sound-queue*)))
-           (dotimes (i (length *al-playing*))
-             (let ((playing (aref *al-playing* i)))
-               (when playing
-                 (when (string= playing file)
-                   (let ((source (nth i sources)))
-                     (al:source-stop source))))))))
     (dolist (source sources)
       (let ((state (cl-openal:get-source source :source-state)))
-        ;;(format t "source ~A ~S~%" n state)
-        (when (and (not (eq state :playing))
-                   (not (null (aref *al-playing* n))))
-          (setf (aref *al-playing* n) nil))
-        (unless (eq state :playing)
-          (let ((file (pop *sound-queue*)))
-            (when file
-              (let ((buffer (load-sound-file file)))
+        ;;(format t "source ~A state: ~S~%" n state)
+        ;; Possible values of state
+        ;; AL_INITIAL
+        ;; AL_STOPPED
+        ;; AL_PLAYING
+        ;; AL_PAUSED
+        (when (or (eq state :initial) (eq state :stopped))
+          (setf (aref *al-playing* n) nil)
+          (let ((tuple (pop *sound-queue*)))
+            (when tuple
+              (let* ((key (first tuple))
+                     (file (second tuple))
+                     (buffer (load-sound-file file)))
                 (when buffer
                   ;; Link source to buffer, and place
                   ;; source at (1 1 1).
@@ -66,15 +67,29 @@
                                               0 0 0))
                   ;; (al:source source :looping :true)
                   (al:source-play source)
-                  (setf (aref *al-playing* n) file)
-                  ))))
+                  (setf (aref *al-playing* n) key)))))
           #+nil
           (let ((new-state (cl-openal:get-source source :source-state)))
             (unless (eq new-state state)
               (format t "source ~A state change ~S -> ~S~%" n state new-state)))))
       (incf n))))
 
+(defun sound-loop (sources)
+  (loop
+     (flet ((step-required ()
+              (or *stop-sound-queue* *sound-queue*)))
+       (bt:with-lock-held (*sound-lock*)
+         (if (step-required)
+             (sound-step sources)
+             (bt:condition-wait *sound-condition* *sound-lock*))))))
+
+(defun init-sound-state ()
+  (setq *al-buffer-cache* (make-hash-table :test #'equal)
+        *al-playing* (make-array *al-sources*
+                                 :initial-contents (make-list *al-sources*))))
+
 (defun init-sound ()
+  (init-sound-state)
   (alut:with-init
     (alc:with-device (device)
       (when device
@@ -82,19 +97,11 @@
           (alc:with-context (context device)
             (alc:make-context-current context)
             (al:with-sources (*al-sources* sources)
-              (loop
-                 (let ((step-required
-                        (bt:with-lock-held (*sound-lock*)
-                          (or *stop-sound-queue* *sound-queue*))))
-                   (bt:with-lock-held (*sound-lock*)
-                     (if step-required
-                         (sound-step sources)
-                         (bt:condition-wait *sound-condition* *sound-lock*))))))))))))
+              (sound-loop sources))))))))
 
 (defvar *sound-thread* nil)
 
 (defun start-sound-thread ()
-  (setq *al-buffer-cache* (make-hash-table :test #'equal))
   (setq *sound-thread*
         (bt:make-thread
          #'(lambda ()
@@ -103,8 +110,8 @@
 
 (defun stop-sound-thread ()
   (when (and *sound-thread* (bt:thread-alive-p *sound-thread*))
-    (bt:destroy-thread *sound-thread*))
-  (setq *al-buffer-cache* (make-hash-table :test #'equal)))
+    (bt:destroy-thread *sound-thread*)
+    (init-sound-state)))
 
 (defvar *sound-sets* (make-hash-table :test #'equalp))
 (defvar *sound-set* nil)
@@ -130,14 +137,10 @@
 
 (defun play-sound (key)
   (when *sound-set*
-    (let ((file (cdr (assoc key (third *sound-set*)))))
-      ;;(format t "  file: ~S~%" file)
-      (play-sound-file file))))
-
-(defun stop-sound (key)
-  (when *sound-set*
-    (let ((file (cdr (assoc key (third *sound-set*)))))
-      (stop-sound-file file))))
+    (let* ((filename (cdr (assoc key (third *sound-set*))))
+           (pathname (merge-pathnames filename
+                                      (merge-pathnames (second *sound-set*) *game-dir*))))
+      (play-sound-file key pathname))))
 
 ;; sounds
 ;;   --- Filename ---          --- Changes ---         --- Attribution ---
