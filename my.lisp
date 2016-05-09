@@ -114,10 +114,26 @@
         (sb-ext:timeout (x)
           (format t "repl timed out (~S)~%" x))))))
 
+(defun getopt (cmdline abbrv)
+  (let ((pos (position (format nil "-~A" abbrv) cmdline :test #'equal)))
+    (when pos
+      (nth (1+ pos) cmdline))))
+
+(defun parse-res (res)
+  (when res
+    (let ((pos (position #\x res)))
+      (when pos
+        (ignore-errors (let ((w (parse-integer (subseq res 0 pos)))
+                             (h (parse-integer (subseq res (1+ pos)))))
+                         (list :width w :height h)))))))
+         
 (defun exe-toplevel ()
   (let ((cmdline (my-command-line)))
     (format t "command line: ~S~%" cmdline)
-    (cepler:start-game :game-dir (path:dirname (car cmdline)))))
+    (let ((game-dir (or (getopt cmdline "d")
+                        (path:dirname (car cmdline))))
+          (res (parse-res (getopt cmdline "r"))))
+      (apply #'cepler:start-game :game-dir game-dir res))))
 
 (defun save-lisp (&key executable)
   #+sbcl

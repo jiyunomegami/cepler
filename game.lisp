@@ -109,32 +109,6 @@
     (push gl-planet *gl-planets*)
     gl-planet))
 
-#+nil
-(defun withnewdata-add-gl-planet (&key
-                                    (name "")
-                                    (day 1)
-                                    (radius 0.5)
-                                    pos
-                                    (texture "ear.jpg"))
-  (destructuring-bind (d i) (dendrite.primitives:sphere-data
-                             ;;:radius radius
-                             :lines-of-latitude 50
-                             :lines-of-longitude 50)
-    (let* ((data (make-gpu-array d :element-type 'g-pnt))
-           (index (make-gpu-array i :element-type :ushort))
-           (gl-planet
-            (make-gl-planet
-             :name name
-             :radius radius
-             :day day
-             :box (make-box :pos pos)
-             :data data
-             :index index
-             :stream (make-buffer-stream data :index-array index)
-             :texture (load-planet-texture texture))))
-      (push gl-planet *gl-planets*)
-      gl-planet)))
-
 ;; Body	Diameter
 ;; (Earth = 1)
 ;; Sun	109
@@ -244,11 +218,7 @@
   (init-rings)
   (load-planet-textures *planet-texture-set*))
 
-;;Rotation Period (hours)	1407.6	-5832.5	23.9   	24.6	9.9	10.7	-17.2	16.1	-153.3
-;; Length of Day (hours)	4222.6	2802.0	24.0   	24.7	9.9	10.7	17.2	16.1	153.3
-
 ;; Gl-Planetary Fact Sheet - Metric
-
 ;;  	 MERCURY 	 VENUS 	 EARTH 	 MOON 	 MARS 	 JUPITER 	 SATURN 	 URANUS 	 NEPTUNE 	 PLUTO 
 ;; Mass (1024kg)	0.330	4.87	5.97	0.073	0.642	1898	568	86.8	102	0.0146
 ;; Diameter (km)	4879	12,104	12,756	3475	6792	142,984	120,536	51,118	49,528	2370
@@ -316,7 +286,6 @@
       (let ((box-pos (box-pos x)))
         (m4:*
          (m4:*
-          ;;(q:to-mat4 (q:from-axis-angle (v! -1 0 0) (coerce (/ pi 4) 'single-float)))
           (q:to-mat4 (q:from-axis-angle *tangent-axis* (coerce (/ pi 2) 'single-float)))
           (m4:* (q:to-mat4 (q:*
                             #.(q:from-axis-angle (v! -1 0 0) (coerce (/ pi 2) 'single-float))
@@ -326,7 +295,7 @@
                 (m4:translation box-pos)))
          (q:to-mat4 (box-rot x))))
       (cam-light-model->world x factor gl-planet)))
-;;- - - - - - - - - - - - - - - - - -
+
 
 (defvar *blending-params* (make-blending-params))
 (defvar *camera* nil)
@@ -344,16 +313,15 @@
 (defpipeline draw-box () (g-> #'box-vert #'box-frag))
 
 
-
 ;;;;;;;;;;;; console ;;;;;;;;;;;;;;;;;;;
+
 (defun-g console-vert ((vert g-pnt) &uniform (model->clip :mat4))
-  (values ;;(v! (pos vert) 1)
+  (values
    (* model->clip (v! (pos vert) 1))
    (norm vert)
    (tex vert)))
 
 (defun-g console-frag ((norm :vec3) (tc :vec2) &uniform (tex :sampler-2d) (fac :float))
-  ;;(v! (s~ (texture tex (* tc 1)) :xyz) fac))
   (* fac (v! (s~ (texture tex (* tc 1)) :xyzw))))
 
 (defpipeline draw-console () (g-> #'console-vert #'console-frag))
@@ -362,21 +330,23 @@
 ;;;;;;;;;;;;;; text ;;;;;;;;;;;;;;;;;;;
 
 (defun-g text-vert ((vert g-pnt) &uniform (model->clip :mat4) (size :float))
-  (values ;;(v! (pos vert) 1)
+  (values
    (* model->clip (v! (pos vert) (/ 1 size)))
    (norm vert)
    (tex vert)))
 
-(defun color-matrix (v)
-  "Return a 4x4 color matrix"
-  (make-array 16 :element-type 'single-float
-              :initial-contents (list (coerce (v:x v) 'single-float) 0f0 0f0 0f0
-                                      0f0 (coerce (v:y v) 'single-float) 0f0 0f0
-                                      0f0 0f0 (coerce (v:z v) 'single-float) 0f0
-                                      0f0 0f0 0f0 1f0)))
-
-(defun-g text-frag ((norm :vec3) (tc :vec2) &uniform (tex :sampler-2d) (fac :float) (col :mat4))
-  (* fac col (v! (s~ (texture tex (* tc 1)) :xyzw))))
+(defun-g text-frag ((norm :vec3) (tc :vec2)
+                    &uniform
+                    (tex :sampler-2d)
+                    (fac :float)
+                    (col :vec3))
+  (let* ((texel (texture tex tc))
+         (i (v:x texel))
+         (w (v:w texel)))
+    (v! (* (v:x col) i)
+        (* (v:y col) i)
+        (* (v:z col) i)
+        (* fac w))))
 
 (defpipeline draw-text () (g-> #'text-vert #'text-frag))
 
@@ -405,13 +375,7 @@
 (defun-g sphere-frag ((norm :vec3) (tc :vec2) (vert :vec3) &uniform (tex :sampler-2d) (fac :float))
   (let ((%tc (v! (/ (+ 3.14159 (atan (v:x vert) (v:z vert))) (* 2 3.14159))
                  (v:y tc))))
-    (v! (s~ (texture tex (* %tc 1)) :xyz) fac)
-    ;; fix line protruding from bottom at low res
-    ;; -> lat/long lines should be a multiple of 36?
-    #+nil
-    (if (>= (v:y tc) 0.98)
-        (v! 0 0 0 0)
-        (v! (s~ (texture tex (* %tc 1)) :xyz) fac))))
+    (v! (s~ (texture tex (* %tc 1)) :xyz) fac)))
 
 (defpipeline draw-sphere () (g-> #'sphere-vert #'sphere-frag))
 
@@ -441,7 +405,6 @@
                     &uniform
                     (model->clip :mat4)
                     (to-tangent :mat4)
-                    ;;(bump-dimensions :vec2)
                     (model-space-light-pos :vec3)
                     (light-intensity :vec4)
                     (ambient-intensity :vec4)
@@ -457,13 +420,7 @@
                          (v:y tex-coord)))
          (t-col (texture tex %tex-coord)))
     (+ (* t-col light-intensity cos-ang-incidence)
-       (* t-col ambient-intensity))
-    ;; fix line protruding from bottom at low res
-    #+nil
-    (if (>= (v:y tex-coord) 0.98)
-        (v! 0 0 0 0)
-        (+ (* t-col light-intensity cos-ang-incidence)
-           (* t-col ambient-intensity)))))
+       (* t-col ambient-intensity))))
 
 (defun-g nm-frag ((model-space-pos :vec3)
                   (vertex-normal :vec3)
@@ -472,7 +429,6 @@
                   &uniform
                   (model->clip :mat4)
                   (to-tangent :mat4)
-                  ;;(bump-dimensions :vec2)
                   (model-space-light-pos :vec3)
                   (light-intensity :vec4)
                   (ambient-intensity :vec4)
@@ -483,7 +439,7 @@
          (full-tangent-norm (- (* (s~ (texture norm-map %tex-coord) :xyzw) 2)
                                (v! 1 1 1 1)))
          (tangent-normal (s~ full-tangent-norm :xyz))
-         (binormal (* (cross vertex-normal (s~ full-tangent-norm :xyz)) (v:w full-tangent-norm)))
+         (binormal (* (cross vertex-normal tangent-normal) (v:w full-tangent-norm)))
          (temp (- model-space-pos
                   model-space-light-pos))
          (light-dir
@@ -501,14 +457,7 @@
          (t-col (texture tex %tex-coord)))
     (+ (* t-col light-intensity cos-ang-incidence)
            (* t-col ambient-intensity dummy-cos-ang-incidence 0.1)
-           (* t-col ambient-intensity))
-    ;; fix line protruding from bottom at low res
-    #+nil
-    (if (>= (v:y tex-coord) 0.98)
-        (v! 0 0 0 0)
-        (+ (* t-col light-intensity cos-ang-incidence)
-           (* t-col ambient-intensity dummy-cos-ang-incidence 0.1)
-           (* t-col ambient-intensity)))))
+           (* t-col ambient-intensity))))
 
 (defun-g bump-frag ((model-space-pos :vec3)
                     (vertex-normal :vec3)
@@ -517,7 +466,6 @@
                     &uniform
                     (model->clip :mat4)
                     (to-tangent :mat4)
-                    ;;(bump-dimensions :vec2)
                     (model-space-light-pos :vec3)
                     (light-intensity :vec4)
                     (ambient-intensity :vec4)
@@ -556,14 +504,7 @@
          (t-col (texture tex %tex-coord)))
     (+ (* t-col light-intensity cos-ang-incidence)
        (* t-col ambient-intensity dummy-cos-ang-incidence)
-       (* t-col ambient-intensity))
-    ;; fix line protruding from bottom at low res
-    #+nil
-    (if (>= (v:y tex-coord) 0.98)
-        (v! 0 0 0 0)
-        (+ (* t-col light-intensity cos-ang-incidence)
-           (* t-col ambient-intensity dummy-cos-ang-incidence)
-           (* t-col ambient-intensity)))))
+       (* t-col ambient-intensity))))
 
 (defpipeline frag-point-light () (g-> #'nm-vert #'nm-frag))
 (defpipeline frag-point-light-bump () (g-> #'nm-vert #'bump-frag))
@@ -595,10 +536,6 @@
                  :light-intensity (v4:*s (v! 1 1 1 0) 1.5)
                  :ambient-intensity (v! 0.2 0.2 0.2 1.0)
                  :norm-map (if bump-map bump-map norm-map)
-                 ;; :bump-dimensions (if bump-map
-                 ;;                      (let ((dimensions (slot-value bump-map 'jungl::base-dimensions)))
-                 ;;                        (v! (first dimensions) (second dimensions)))
-                 ;;                      (v! 0 0))
                  :tex (gl-planet-texture gl-planet)))
         (map-g #'draw-sphere (gl-planet-stream gl-planet)
                :model->clip (model->clip box *camera*)
@@ -648,7 +585,8 @@
                 (new-x (+ pos-x dx))
                 (new-y pos-y))
            (declare (ignore glyph-texture))
-           (when (or (> new-x 0.98) (char= c #\Newline))
+           (when (or (> new-x 1.00)
+                     (char= c #\Newline))
              (push text-width widths)
              (setq text-width 0.0)
              (setf new-x -0.90)
@@ -685,9 +623,10 @@
                    (t ;;(eq :left alignment)
                     (if (numberp x) x -0.90)))))
         (with-blending *blending-params*
-          (let ((pos-x (start-x))
-                (pos-y y)
-                (color (color-matrix color)))
+          (let* ((pos-x (start-x))
+                 (pos-y y)
+                 (box (when *funky* (make-box :pos (v! (v:x (pos *camera*)) (v:y (pos *camera*)) (- (v:z (pos *camera*)) 1)))))
+                 (model->clip (when *funky* (model->clip box *camera*))))
             (loop for c across text-string
                do
                  (let* ((glyph-texture (get-glyph c))
@@ -697,23 +636,20 @@
                         (dx (* (if *funky* 0.13 0.11) size (calc-glyph-x-size c glyph-size)))
                         (new-x (+ pos-x dx))
                         (new-y pos-y))
-                   (when (or (> new-x 1.00) ;;(and (not *funky*) (> new-x 0.98))
+                   (when (or (> new-x 1.00)
                              (char= c #\Newline))
                      (setf new-x (start-x))
                      (decf new-y (* (if *funky* 0.10 0.08) size (/ *base-glyph-array-size* *glyph-array-size*))))
                    (setf pos-x new-x
                          pos-y new-y)
-                   (unless (char= c #\Newline)
+                   (unless (or (char= c #\Newline) (char= c #\Space))
                      (when *funky*
                        (incf this-y *funky-y*))
                      (map-g #'draw-text *text-stream*
                             :model->clip (if *funky*
-                                             (m4:*
-                                              (let ((box (make-box :pos (v! (v:x (pos *camera*)) (v:y (pos *camera*)) (- (v:z (pos *camera*)) 1)))))
-                                                (model->clip box *camera*))
-                                              (m4:*
-                                               (q:to-mat4 (q:from-axis-angle (v! -1 0 0) (coerce (/ pi 4) 'single-float)))
-                                               (m4:translation (v! this-x this-y 0))))
+                                             (m4:* model->clip
+                                                   (m4:* #.(q:to-mat4 (q:from-axis-angle (v! -1 0 0) (coerce (/ pi 4) 'single-float)))
+                                                         (m4:translation (v! this-x this-y 0))))
                                              (m4:translation (v! this-x this-y 0)))
                             :col color
                             :fac transparency
@@ -726,9 +662,10 @@
 ;; not much faster...
 (defun render-text-faster (text-string &key (x -0.90) (y 0.80) (color (v! 1 1 1)) (size 1.0) (transparency 0.8) (funky *funky*))
   (with-blending *blending-params*
-    (let ((pos-x x)
-          (pos-y y)
-          (color (color-matrix color)))
+    (let* ((pos-x x)
+           (pos-y y)
+           (box (when funky (make-box :pos (v! (v:x (pos *camera*)) (v:y (pos *camera*)) (- (v:z (pos *camera*)) 1)))))
+           (model->clip (when funky (model->clip box *camera*))))
       (loop for c across text-string
          do
            (let* ((glyph-texture (get-glyph c))
@@ -744,25 +681,21 @@
                (decf new-y (* (if funky 0.10 0.08) size (/ *base-glyph-array-size* *glyph-array-size*)))
                (setf pos-y new-y))
              (setf pos-x new-x)
-             (unless (char= c #\Newline)
+             (unless (or (char= c #\Newline) (char= c #\Space))
                (when funky
                  (incf this-y *funky-y*))
                (map-g #'draw-text *text-stream*
                       :model->clip (if funky
-                                       (m4:*
-                                        (let ((box (make-box :pos (v! (v:x (pos *camera*)) (v:y (pos *camera*)) (- (v:z (pos *camera*)) 1)))))
-                                          (model->clip box *camera*))
-                                        (m4:*
-                                         #.(q:to-mat4 (q:from-axis-angle (v! -1 0 0) #.(coerce (/ pi 4) 'single-float)))
-                                         (m4:translation (v! this-x this-y 0))))
+                                       (m4:* model->clip
+                                             (m4:* #.(q:to-mat4 (q:from-axis-angle (v! -1 0 0) #.(coerce (/ pi 4) 'single-float)))
+                                                   (m4:translation (v! this-x this-y 0))))
                                        (m4:translation (v! this-x this-y 0)))
                       :col color
                       :fac transparency
                       :size (if funky
                                 (* size (+ 0.618 (* 0.618 (atan (/ (/ 1 (- this-y -1)) 1)))))
                                 size)
-                      :tex glyph-texture
-                      )))))))
+                      :tex glyph-texture)))))))
 
 (defvar *show-help* t)
 (defvar *hide-help* nil)
@@ -863,21 +796,15 @@
     (when *gl-saturn*
       (render-rings *gl-saturn* *rotation-factor*)))
 
+  (gl:depth-func :lequal)
+  (gl:disable :depth-test)
   (when *show-console*
-    (gl:depth-func :lequal)
-    (gl:disable :depth-test)
     (with-blending *blending-params*
       (map-g #'draw-console *console-stream*
              :model->clip (m4:translation (v! 0 0 0))
              :fac 0.5
-             :tex *console-texture*))
-    (gl:enable :depth-test)
-    (gl:depth-func :less))
-
+             :tex *console-texture*)))
   (when *console-text*
-    (gl:depth-func :lequal)
-    (gl:disable :depth-test)
-
     (render-text *console-text*)
     (render-text *camera-text* :x :right)
     (render-text *date-text* :x :center)
@@ -955,23 +882,22 @@
        (render-text (format nil "GAME OVER")
                     :x :center :y 0.5 :color (v! 1 0 0)))
       (*hit-other*
-       (render-text (format nil "YOU WIN~%Collided with ~A~%with remaining fuel ~,1f"
-                            (slot-value *hit-other* 'name)
+       (render-text (format nil "YOU WIN~%Collided with ~A"
+                            (slot-value *hit-other* 'name))
+                    :x :center :y 0.5 :color (v! 0 1 0))
+       (render-text (Format nil "~%~%with remaining fuel ~,1f"
                             *fuel-remaining*)
-                    :x :center :y 0.5 :color (v! 0 1 0)))
+                    :x :center :y 0.5 :color (if *cheated* (v! 0.5 0.5 0.5) (v! 0 1 0))))
       (*colliding*
        (render-text (format nil "Collided with ~A" (slot-value *colliding* 'name))
                     :x :center :y 0.5 :color (v! 0 1 0))))
     (when *paused*
       (render-text "PAUSED" :x :center :y 0.3 :color (v! 1 1 0))
-      (render-text "PRESS SPACE TO CONTINUE" :x :center :y 0.2))
-    
-    (gl:enable :depth-test)
-    (gl:depth-func :less))
+      (render-text "PRESS SPACE TO CONTINUE" :x :center :y 0.2)))
 
+  (gl:enable :depth-test)
+  (gl:depth-func :less)
   (swap))
-
-;;- - - - - - - - - - - - - - - - - -
 
 (defun init-sphere ()
   (destructuring-bind (d i) (dendrite.primitives:sphere-data
@@ -1061,13 +987,11 @@
            (tti (/ (* -1 (+ (v3:dot camera-pos plane-normal) d))
                    (v3:dot ray plane-normal)))
            (p (v3:+ camera-pos (v3:*s ray tti))))
-      ;;(format t "P: ~A~%" p)
       (let* ((rp (let ((x (/ (v:x p) *gl-scale*))
                        (y (/ (v:y p) *gl-scale*))
                        (z (/ (v:z p) *gl-scale*)))
                    (v! x y z)))
              (obj-pos (v3:+ rp (slot-value *sun* 'pos))))
-        ;;(format t "OBJ-POS: ~A~%" obj-pos)
         (unless *vessel*
           (when (> (v:z (pos *camera*)) 20.0)
             (setf (v:z (pos *camera*)) 20.0)))
@@ -1085,7 +1009,7 @@
       (if *targeting*
           (let ((d (skitter:xy-pos-vec event)))
             (target d))
-          (progn
+          (unless *vessel*
             (add-planet)
             (follow *vessel*)))))
   (unless *targeting*
@@ -1152,13 +1076,14 @@
 
 (defun camera-follow (obj)
   (let* ((rel-pos (relative-position obj *sun*))
-         (dir (v3:*s (v3:normalize rel-pos) *follow-direction*))
+         (dir (if (and (eq *following* *vessel*) (not *follow-sun-lock*))
+                  (v3:*s (dir *camera*) *follow-direction*)
+                  (v3:*s (v3:normalize rel-pos) *follow-direction*)))
          (radius (slot-value obj 'radius))
          (gl-radius (coerce (* 1520 (if *sun-actual-size* (/ 5.0 109) 1) *gl-scale* radius) 'single-float))
          (off (v3:*s (v3:+ (v! 0.0 0.0 (* 1 (max (* gl-radius 0.05) 0.5)))
                            (v3:*s dir 1.0))
                      (* gl-radius 2)))
-         ;;(pos (slot-value obj 'pos))
          (gl-pos (v3:*s rel-pos *gl-scale*)))
     (when *follow-camera*
       (setq off (v3:+ off (pos *follow-camera*))))
@@ -1183,7 +1108,8 @@
 (defun reset-planets ()
   (init-gl-planets)
   (init-planets)
-  (setq *vessel* nil))
+  (setq *vessel* nil
+        *gl-pluto* nil))
 
 (defun reset-sim ()
   (setq *following* nil)
@@ -1263,19 +1189,28 @@
       (pause))
     (when (skitter:key-down-p key.p)
       (pause))
+    (when (skitter:key-down-p key.backspace)
+      (when (and *vessel* (< (fuel-remaining *vessel*) 0.01))
+        (setq *cheated* t)
+        (incf (fuel-remaining *vessel*) 200)))
     (when (skitter:key-down-p key.r)
-      (unless *paused*
-        (let ((following *following*))
-          (reset-sim)
-          (when following
-            (follow following)))))
+      (let ((following *following*))
+        (reset-sim)
+        (when following
+          (follow following))))
     (when (skitter:key-down-p key.j)
-      (unless *paused*
-        (let ((following *following*))
-          (setq *sun-actual-size* (not *sun-actual-size*))
-          (reset-sim)
-          (when following
-            (follow following)))))
+      (let ((following *following*))
+        (setq *sun-actual-size* (not *sun-actual-size*))
+        (init-gl-planets)
+        (when *gl-pluto*
+          (setq *gl-pluto* (add-gl-planet :name (gl-planet-name *gl-pluto*)
+                                          :radius 0.18
+                                          :pos (box-pos (gl-planet-box *gl-pluto*))
+                                          :texture "plu0rss1.jpg"
+                                          :day (gl-planet-day *gl-pluto*))))
+        (when following
+          (unfollow)
+          (follow following))))
     (when (skitter:key-down-p key.v)
       (when *vsop-available*
         (setq *use-vsop* (not *use-vsop*))))
@@ -1457,8 +1392,7 @@
   (defun fps-limit-delay ()
     (let ((elapsed-time (- (get-internal-real-time) fps-frame-start-time))
           (spf (/ internal-time-units-per-second
-                  max-fps
-                  #+nil (if *paused* 5 max-fps))))
+                  max-fps)))
       (when (< elapsed-time spf)
         (sdl2:delay (floor (- spf elapsed-time))))
       (setf fps-frame-start-time (get-internal-real-time))))
@@ -1472,11 +1406,11 @@
         (setq *fps-text* (format nil "FPS: ~,1f" fps))
         (setq *console-text*
               (format nil "~A ~A" *fps-text*
-                      (format nil "~%step: ~,2f days/s~%VSOP87: ~A~%~A~A"
+                      (format nil "~%step: ~,2f days/s~%VSOP87: ~A~%"
                               (/ *time-acceleration* (* 24 60 60))
                               (if *use-vsop* "on" "off")
-                              "" ;;(if *normal-mapping-enabled* "NM on" "NM off")
-                              "" ;;(if *tangent-function* " (tan)" "")
+                              ;;(if *normal-mapping-enabled* "NM on" "NM off")
+                              ;;(if *tangent-function* " (tan)" "")
                               )))
         (setf fps-frames 0
               fps-start-time (get-internal-real-time))))))
@@ -1512,7 +1446,7 @@
     (when (and *gl-pluto* (> (v3:length (box-pos (gl-planet-box *gl-pluto*))) 800))
       ;; too far away
       (when *vessel*
-        (setf (slot-value *vessel* 'pos) (v! 0 0 0)))
+        (setf (slot-value *vessel* 'pos) (slot-value *sun* 'pos)))
       (setf (box-pos (gl-planet-box *gl-pluto*)) (v! 0 0 0))
       (setq *colliding* *sun*
             *hit-sun* t))

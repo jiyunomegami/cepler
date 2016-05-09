@@ -591,6 +591,7 @@
 (defvar *hit-sun* nil)
 (defvar *hit-other* nil)
 (defvar *fuel-remaining* nil)
+(defvar *cheated* nil)
 
 (defun square (x)
   (* x x))
@@ -696,6 +697,7 @@
                                        )))
         (setq *gl-pluto* (add-gl-planet :name name :radius (* 1520 *gl-scale* radius) :pos (v! 0 0 0) :texture "plu0rss1.jpg" :day (/ 24 -153.3)))
         (setq *vessel* new-pluto)
+        (setq *cheated* nil)
         ;;(describe new-pluto)
         ;;(format t "from earth: ~A~%" (v3:- pos earth-pos))
         (setq *all-objs* (append *all-objs* (list new-pluto)))))))

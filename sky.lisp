@@ -1,4 +1,4 @@
-;;; from lark
+;;; from lark (https://github.com/cbaggers/lark)
 (in-package :cepler)
 
 (defvar *game-dir*
