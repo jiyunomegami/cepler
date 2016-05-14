@@ -23,7 +23,7 @@
 (defun-g sky-frag ((tc :vec3) &uniform (tex :sampler-cube))
   (texture tex tc))
 
-(defpipeline draw-sky () (g-> #'sky-vert #'sky-frag))
+(def-g-> draw-sky () #'sky-vert #'sky-frag)
 
 (defun render-sky ()
   (when *sky-enabled*
@@ -38,7 +38,7 @@
                                (cepl.devil:load-image-to-c-array
                                 (merge-pathnames p *game-dir*)))
                              paths))
-    (make-texture ca :element-type :rgb8 :cubes t)))
+    (sample (make-texture ca :element-type :rgb8 :cubes t))))
 
 (defun init-sky-data ()
   (let* ((bx (dendrite.primitives:cube-data
@@ -50,12 +50,12 @@
     (setf *skybox-stream*
 	  (make-buffer-stream data :index-array ind :retain-arrays t)))
   (setf *sky-cube-texture*
-	(make-cubemap-tex
-	 "./stars/TychoSkymapII.t3_08192x04096_80_mx.jpg" ;; left
-	 "./stars/TychoSkymapII.t3_08192x04096_80_px.jpg" ;; right
-	 "./stars/vhflipped_my.jpg" ;; up
+        (make-cubemap-tex
+         "./stars/TychoSkymapII.t3_08192x04096_80_mx.jpg" ;; left
+         "./stars/TychoSkymapII.t3_08192x04096_80_px.jpg" ;; right
+         "./stars/vhflipped_my.jpg" ;; up
          "./stars/vhflipped_py.jpg" ;; down
-	 "./stars/TychoSkymapII.t3_08192x04096_80_mz.jpg" ;; front
-	 "./stars/TychoSkymapII.t3_08192x04096_80_pz.jpg" ;; back
+         "./stars/TychoSkymapII.t3_08192x04096_80_mz.jpg" ;; front
+         "./stars/TychoSkymapII.t3_08192x04096_80_pz.jpg" ;; back
          )))
 

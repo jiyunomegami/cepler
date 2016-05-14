@@ -1,5 +1,5 @@
-#all: remake
-all: quicklisp
+all: remake
+#all: quicklisp
 
 LISP=sbcl
 

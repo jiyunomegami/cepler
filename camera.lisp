@@ -25,7 +25,8 @@
   ((cam->clip :type (simple-array single-float (16)) :reader cam->clip)
    (cam->clip-func :initform nil :initarg :cam->clip-func )
    (frame-size :reader frame-size :initarg :frame-size
-               :initform (jungl:viewport-resolution (jungl:current-viewport)))
+               :initform (let ((res (cepl.viewports:viewport-resolution (cepl.viewports:current-viewport))))
+                           (list (aref res 0) (aref res 1))))
    (near :type single-float :reader near :initarg :near)
    (far :type single-float :reader far :initarg :far)
    (fov :type single-float :reader fov :initarg :fov)))
@@ -57,7 +58,7 @@
             (simple-array (list (aref frame 0)
 				(aref frame 1)))
 
-            (jungl:viewport (jungl:viewport-resolution frame))
+            (cepl.viewports:viewport (cepl.viewports:viewport-resolution frame))
             (list frame))))
     (setf (slot-value camera 'frame-size) frame))
   (update-cam->clip camera))
@@ -72,11 +73,11 @@
    (position :type (simple-array single-float (3))
              :initform (v3:make 0.0 0.0 0.0)
              :initarg :pos
-             :accessor cepl-generics:pos)
+             :accessor pos)
    (direction :type (simple-array single-float (3))
               :initform (v3:make 0.0 0.0 -1.0)
               :initarg :dir
-              :accessor cepl-generics:dir)))
+              :accessor dir)))
 
 ;; (defmethod look-at ((camera pos-dir-cam) point-vec3)
 ;;   (with-slots (world-up position direction) camera
@@ -96,15 +97,15 @@
             (m4:melm result 2 3) (aref eye-inv 2))
       result)))
 
-(defun make-camera (&optional (frame (jungl:current-viewport))
+(defun make-camera (&optional (frame (cepl.viewports:current-viewport))
                       (near 1.0) (far 1000.0) (fov #.(coerce (/ pi 3) 'single-float))
                       (cam->clip-function #'rtg-math.projection:perspective))
   (let* ((frame
           (etypecase frame
             ((simple-array single-float (2)) (list (aref frame 0)
                                                    (aref frame 1)))
-
-            (jungl:viewport (jungl:viewport-resolution frame))
+            (cepl.viewports:viewport (let ((res (cepl.viewports:viewport-resolution frame)))
+                                       (list (aref res 0) (aref res 1))))
             (list frame)))
          (camera (make-instance 'pos-dir-cam
                                 :cam->clip-func cam->clip-function

@@ -37,17 +37,12 @@
 (load-slime)
 (format t "using slime in ~S~%" swank-loader:*source-directory*)
 
-(defun load-openal ()
-  (ql:quickload "bordeaux-threads")
-  (ql:quickload "cl-openal")
-  (ql:quickload "cl-alut")
-  (ql:quickload "cl-alc"))
-
 (defun load-stuff ()
   ;;(ql:quickload "cl-freetype2")
   (push #p"~/lgj/cl-freetype2/" asdf:*central-registry*)
   (push #p"~/lgj/documentation-utils/" asdf:*central-registry*)
   (push #p"~/lgj/temporal-functions/" asdf:*central-registry*)
+  (push #p"~/lgj/skitter/" asdf:*central-registry*)
   (push #p"~/lgj/cepl/" asdf:*central-registry*)
   (push #p"~/lgj/cepl.examples/" asdf:*central-registry*)
   (push #p"~/lgj/cepl.devil/" asdf:*central-registry*)
@@ -56,6 +51,8 @@
   (push #p"~/lgj/cepl.sdl2/" asdf:*central-registry*)
   (push #p"~/lgj/cl-opengl/" asdf:*central-registry*)
   (push #p"~/lgj/cffi/" asdf:*central-registry*)
+  (push #p"~/lgj/cl-openal/" asdf:*central-registry*)
+  (push #p"~/lgj/bordeaux-threads/" asdf:*central-registry*)
   ;; (asdf:operate 'asdf:load-op :cffi)
   ;; (asdf:operate 'asdf:load-op :cl-opengl)
   ;; (asdf:operate 'asdf:load-op :cepl)
@@ -64,6 +61,7 @@
   ;; (asdf:operate 'asdf:load-op :cepl.camera)
   ;; (asdf:operate 'asdf:load-op :cepl.sdl2)
   ;; (asdf:operate 'asdf:load-op :cepl.skitter.sdl2)
+  (asdf:operate 'asdf:load-op :cl-alc)
   )
 
 (defun load-game ()
@@ -75,15 +73,21 @@
   (asdf:operate 'asdf:load-op :cepler)
   (load "ft.lisp"))
 
+(defun load-openal ()
+  (ql:quickload "bordeaux-threads")
+  (ql:quickload "cl-openal")
+  (ql:quickload "cl-alut")
+  (ql:quickload "cl-alc"))
+
 (defun load-using-quicklisp ()
-  (format t "using packages from quicklisp only~%"))
+  (format t "using packages from quicklisp only~%")
+  (load-openal))
 
 (defvar *quicklisp-only* nil)
 
 (defun load-all ()
   (let ((quicklisp-only (equal "1" (my-getenv "QUICKLISP_ONLY"))))
     (setq *quicklisp-only* quicklisp-only)
-    (load-openal)
     (if quicklisp-only
         (load-using-quicklisp)
         (load-stuff))

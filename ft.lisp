@@ -9,7 +9,7 @@
 (defvar *face* nil)
 (defvar *glyphs* (make-hash-table :test #'equal))
 (defvar *glyph-sizes* (make-hash-table :test #'equal))
-(defparameter *base-glyph-array-size* 32)
+(defparameter *base-glyph-array-size* 128)
 (defvar *glyph-array-size* *base-glyph-array-size*)
 
 (defun set-font-size (size)
@@ -19,7 +19,8 @@
     (when (> array-size 256)
       (setq array-size 256))
     (setq *glyph-array-size* array-size))
-  (freetype2:set-char-size *face* (* 24 64) 0 72 72)
+  ;;(freetype2:set-char-size *face* (* 24 64) 0 72 72)
+  (freetype2:set-char-size *face* (* 24 64 4) 0 72 72)
   (setq *glyphs* (make-hash-table :test #'equal)))
 
 (defvar *loaded-freetype-library* nil)
@@ -37,10 +38,9 @@
         (setf freetype2:*library* (freetype2:make-freetype))
         (format t "new freetype2 library: ~S~%" freetype2:*library*))))
   (setq *face* (freetype2:new-face font-file))
-  (freetype2:set-char-size *face* (* 24 64) 0 72 72)
-  (setq *glyphs* (make-hash-table :test #'equal)))
+  (set-font-size 1))
 
-(defun make-glyph-texture (width height buffer)
+(defun orig-make-glyph-texture (width height buffer)
   (let* ((img-data (loop :for i :below width :collect
                       (loop :for j :below height :collect
                          (let ((val (aref buffer i j)))
@@ -54,8 +54,30 @@
     (with-c-array
         (temp (make-c-array img-data
                             :dimensions (list width height)
-                            :element-type :ubyte-vec4))
-      (make-texture temp))))
+                            :element-type :uint8-vec4))
+      (sample (make-texture temp)))))
+
+(defun make-glyph-texture (width height buffer)
+  (let* ((img-data (loop :for j :below height :collect
+                      (loop :for i :below width :collect
+                         (let ((val (aref buffer i j)))
+                           (make-array 4
+                                       :initial-contents
+                                       (list val val val val)
+                                       #+nil
+                                       (list (if (> val 0) 255 0)
+                                             (if (> val 0) 255 0)
+                                             (if (> val 0) 255 0)
+                                             (if (> val 0) val 0)
+                                             )))))))
+    (with-c-array
+        (temp (make-c-array img-data
+                            :dimensions (list width height)
+                            :element-type :uint8-vec4))
+      (let* ((texture (make-texture temp
+                                    :element-type :rgba8))
+             (sampler (sample texture)))
+        sampler))))
 
 (defun text-render (face string direction)
   (let* ((flags (if (or (eq direction :up-down)
@@ -84,7 +106,7 @@
   (let ((str (princ-to-string c)))
     (or (gethash str *glyphs*)
         (when *face*
-          (text-render *face* (princ-to-string c) :left-right)))))
+          (text-render *face* str :left-right)))))
 
 (defun get-glyph-size (c)
   (let ((str (princ-to-string c)))

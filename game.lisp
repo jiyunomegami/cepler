@@ -24,6 +24,8 @@
 (defparameter *mouse-x-pos* 400)
 (defparameter *mouse-y-pos* 300)
 
+(defvar *use-rtt* t)
+
 ;;;;;;;;;; fonts ;;;;;;;;;;;;;
 (defvar *face* nil)
 (defvar *glyphs* (make-hash-table :test #'equal))
@@ -108,7 +110,7 @@
           :data *sphere-data*
           :index *sphere-index*
           :stream *sphere-stream*
-          :texture (load-planet-texture texture))))
+          :texture (sample (load-planet-texture texture)))))
     (push gl-planet *gl-planets*)
     gl-planet))
 
@@ -200,9 +202,9 @@
           (let ((texture (car tuple))
                 (normal-map (cadr tuple))
                 (bump-map (caddr tuple)))
-            (setf (gl-planet-texture gl-planet) (load-planet-texture texture dir)
-                  (gl-planet-normal-texture gl-planet) (if normal-map (load-planet-texture normal-map dir) nil)
-                  (gl-planet-bump-texture gl-planet) (if bump-map (load-planet-texture bump-map dir) nil))))))))
+            (setf (gl-planet-texture gl-planet) (sample (load-planet-texture texture dir))
+                  (gl-planet-normal-texture gl-planet) (if normal-map (sample (load-planet-texture normal-map dir)) nil)
+                  (gl-planet-bump-texture gl-planet) (if bump-map (sample (load-planet-texture bump-map dir)) nil))))))))
 
 (defun init-gl-planets ()
   (setq *gl-planets* nil)
@@ -313,7 +315,7 @@
 (defun-g box-frag ((norm :vec3) (tc :vec2) &uniform (tex :sampler-2d) (fac :float))
   (v! (s~ (texture tex (* tc 1)) :xyz) fac))
 
-(defpipeline draw-box () (g-> #'box-vert #'box-frag))
+(def-g-> draw-box () #'box-vert #'box-frag)
 
 
 ;;;;;;;;;;;; console ;;;;;;;;;;;;;;;;;;;
@@ -327,25 +329,25 @@
 (defun-g console-frag ((norm :vec3) (tc :vec2) &uniform (tex :sampler-2d) (fac :float))
   (* fac (v! (s~ (texture tex (* tc 1)) :xyzw))))
 
-(defpipeline draw-console () (g-> #'console-vert #'console-frag))
+(def-g-> draw-console () #'console-vert #'console-frag)
 
 (defun-g rttconsole-vert ((vert g-pnt) &uniform (model->clip :mat4))
   (values
    (* model->clip (v! (pos vert) 1))
    (norm vert)
    (tex vert)))
-
+ 
 (defun-g rttconsole-frag ((norm :vec3) (tc :vec2) &uniform (tex :sampler-2d) (fac :float))
   (* fac (v! (s~ (texture tex (v! (v:x tc) (- 1 (v:y tc)))) :xyzw))))
 
-(defpipeline draw-rttconsole () (g-> #'rttconsole-vert #'rttconsole-frag))
+(def-g-> draw-rttconsole () #'rttconsole-vert #'rttconsole-frag)
 
 
 ;;;;;;;;;;;;;; text ;;;;;;;;;;;;;;;;;;;
 
 (defun-g text-vert ((vert g-pnt) &uniform (model->clip :mat4) (size :float))
   (values
-   (* model->clip (v! (pos vert) (/ 1 size)))
+   (* model->clip (v! (pos vert) (/ 1 size))) 
    (norm vert)
    (tex vert)))
 
@@ -355,29 +357,40 @@
                     (fac :float)
                     (col :vec3))
   (let* ((texel (texture tex tc))
-         (i (v:x texel))
-         (w (v:w texel)))
+         (w (v:x texel))
+         (i (if (> w 0) 1.0 0.0)))
+    (cond 
+      ((> w 0.0)
+       (setq i 1.0))
+      (t (setq i 0.0)))
     (v! (* (v:x col) i)
         (* (v:y col) i)
         (* (v:z col) i)
         (* fac w))))
 
-(defun-g text-frag ((norm :vec3) (tc :vec2)
-                    &uniform
-                    (tex :sampler-2d)
-                    (fac :float)
-                    (col :vec3))
+(defun-g rtt-text-frag ((norm :vec3) (tc :vec2)
+                        &uniform 
+                        (tex :sampler-2d)   
+                        (fac :float)
+                        (col :vec3))
   (let* ((texel (texture tex tc))
-         (i (v:x texel))
-         (w (v:w texel)))
+         ;;(i (v:x texel))
+         ;;(w (v:w texel)))
+         (w (v:x texel))
+         (i (if (> w 0) 1.0 0.0)))
+    (cond 
+      ((> w 0.0)
+       (setq i 1.0))
+      (t (setq i 0.0)))
     (v! (* (v:x col) i)
         (* (v:y col) i)
         (* (v:z col) i)
         (clamp
-         (* 1.3 (sqrt w))
+         (* fac 1.2 (sqrt w))
          0.0 1.0))))
 
-(defpipeline draw-text () (g-> #'text-vert #'text-frag))
+(def-g-> normal-draw-text () #'text-vert #'normal-text-frag)
+(def-g-> rtt-draw-text () #'text-vert #'rtt-text-frag)
 
 (defvar *text-data* nil)
 (defvar *text-index* nil)
@@ -406,7 +419,7 @@
                  (v:y tc))))
     (v! (s~ (texture tex (* %tc 1)) :xyz) fac)))
 
-(defpipeline draw-sphere () (g-> #'sphere-vert #'sphere-frag))
+(def-g-> draw-sphere () #'sphere-vert #'sphere-frag)
 
 
 (defvar *lighting-enabled* t)
@@ -535,9 +548,9 @@
        (* t-col ambient-intensity dummy-cos-ang-incidence)
        (* t-col ambient-intensity))))
 
-(defpipeline frag-point-light () (g-> #'nm-vert #'nm-frag))
-(defpipeline frag-point-light-bump () (g-> #'nm-vert #'bump-frag))
-(defpipeline frag-point-light-nonm () (g-> #'nm-vert #'nonm-frag))
+(def-g-> frag-point-light () #'nm-vert #'nm-frag)
+(def-g-> frag-point-light-bump () #'nm-vert #'bump-frag)
+(def-g-> frag-point-light-nonm () #'nm-vert #'nonm-frag)
 
 (defvar *normal-mapping-enabled* t)
 
@@ -667,7 +680,7 @@
                    (unless (or (char= c #\Newline) (char= c #\Space))
                      (when *funky*
                        (incf this-y *funky-y*))
-                     (map-g #'draw-text *text-stream*
+                     (map-g (if *use-rtt* #'rtt-draw-text #'normal-draw-text) *text-stream*
                             :model->clip (if *funky*
                                              (m4:* model->clip
                                                    (m4:* #.(q:to-mat4 (q:from-axis-angle (v! -1 0 0) (coerce (/ pi 4) 'single-float)))
@@ -706,7 +719,7 @@
              (unless (or (char= c #\Newline) (char= c #\Space))
                (when funky
                  (incf this-y *funky-y*))
-               (map-g #'draw-text *text-stream*
+               (map-g (if *use-rtt* #'rtt-draw-text #'normal-draw-text) *text-stream*
                       :model->clip (if funky
                                        (m4:* model->clip
                                              (m4:* #.(q:to-mat4 (q:from-axis-angle (v! -1 0 0) #.(coerce (/ pi 4) 'single-float)))
@@ -734,9 +747,10 @@
       (setf *rings-data* (make-gpu-array d :element-type 'g-pnt)
             *rings-index* (make-gpu-array i :element-type :ushort)
             *rings-stream* (make-buffer-stream *rings-data* :index-array *rings-index*)
-            *rings-texture* (cepl.devil:load-image-to-texture
-                             (merge-pathnames "rings-saturn.png"
-                                              (merge-pathnames "set2/" *game-dir*)))))))
+            *rings-texture* (sample
+                             (cepl.devil:load-image-to-texture
+                              (merge-pathnames "rings-saturn.png"
+                                               (merge-pathnames "set2/" *game-dir*))))))))
 
 (defun-g rings-vert ((vert g-pnt) &uniform (model->clip :mat4) (radius :float))
   (values
@@ -775,7 +789,7 @@
                  (* f (v! (* sf (v:x c)) (* sf (v:y c)) (* sf (v:z c)) (* 10 (v:w c)))))
                (* f (v! (s~ (texture tex (* %tc 1)) :xyzw))))))))))
 
-(defpipeline draw-rings () (g-> #'rings-vert #'rings-frag))
+(def-g-> draw-rings () #'rings-vert #'rings-frag)
 
 (defun render-rings (gl-planet factor)
   (declare (ignore factor))
@@ -806,11 +820,11 @@
 
 (defun init-render-to-texture ()
   (let* ((framebuffer (first (gl:gen-framebuffers 1)))
-         (jungl-texture (jungl:make-texture
-                         nil
-                         :dimensions (list *rtt-width* *rtt-height*)
-                         :element-type :rgba8))
-         (gl-texture (jungl::texture-id jungl-texture)))
+         (cepl-texture (cepl.textures:make-texture
+                        nil
+                        :dimensions (list *rtt-width* *rtt-height*)
+                        :element-type :rgba8))
+         (gl-texture (cepl.textures::texture-id cepl-texture)))
     (gl:bind-framebuffer :framebuffer framebuffer)
     (gl:bind-texture :texture-2d gl-texture)
     (gl:framebuffer-texture-2d :framebuffer
@@ -826,7 +840,7 @@
         (error "Framebuffer status: ~A." framebuffer-status)))
 
     (setq *rtt-framebuffer* framebuffer
-          *rtt-texture* jungl-texture)))
+          *rtt-texture* (sample cepl-texture))))
 
 (defmacro text-setf (&rest rest)
   `(progn
@@ -834,17 +848,17 @@
      (setf ,@rest)))
 
 (defun render-overlay ()
-  (gl:bind-framebuffer :framebuffer *rtt-framebuffer*)
-  (gl:viewport 0 0 *rtt-width* *rtt-height*)
-  (clear)
-  ;;(render-sky)
+  (when *use-rtt*
+    (gl:bind-framebuffer :framebuffer *rtt-framebuffer*)
+    (gl:viewport 0 0 *rtt-width* *rtt-height*)
+    (gl:clear :color-buffer #+nil :depth-buffer))
   (gl:depth-func :lequal)
   (gl:disable :depth-test)
   (when *show-console*
     (with-blending *blending-params*
       (map-g #'draw-console *console-stream*
-             :model->clip (m4:translation (v! 0 0 0))
-             :fac 0.8
+             :model->clip #.(m4:translation (v! 0 0 0))
+             :fac (if *use-rtt* (/ 0.8 0.95) 0.8)
              :tex *console-texture*)))
   (when *console-text*
     (render-text *console-text*)
@@ -940,9 +954,7 @@
                     :x :center :y 0.5 :color (v! 0 1 0))))
     (when *paused*
       (render-text "PAUSED" :x :center :y 0.3 :color (v! 1 1 0))
-      (render-text "PRESS SPACE TO CONTINUE" :x :center :y 0.2)))
-  ;;(swap)
-  )
+      (render-text "PRESS SPACE TO CONTINUE" :x :center :y 0.2))))
 
 (defvar *cull-test-fov-cos* nil)
 
@@ -951,6 +963,7 @@
     (incf *rotation-factor* (* 0.01)))
 
   (clear)
+
   (render-sky)
 
   (with-blending *blending-params*
@@ -974,19 +987,22 @@
                 (render-rings *gl-saturn* *rotation-factor*))))
           (render-rings *gl-saturn* *rotation-factor*))))
 
-  (when *overlay-changed*
-    (render-overlay)
-    (let ((res (jungl:viewport-resolution (jungl:current-viewport))))
-      (gl:bind-framebuffer :framebuffer 0)
-      (gl:viewport 0 0 (car res) (cadr res))))
+  (if *use-rtt*
+      (when *overlay-changed*
+        (render-overlay)
+        (let ((res (cepl.viewports:viewport-resolution (cepl.viewports:current-viewport))))
+          (gl:bind-framebuffer :framebuffer 0)
+          (gl:viewport 0 0 (aref res 0) (aref res 1))))
+      (render-overlay))
 
-  (gl:depth-func :lequal)
-  (gl:disable :depth-test)
-  (with-blending *blending-params*
-    (map-g #'draw-rttconsole *console-stream*
-           :model->clip (m4:translation (v! 0 0 0))
-           :fac 0.8
-           :tex *rtt-texture*))
+  (when *use-rtt*
+    (gl:depth-func :lequal)
+    (gl:disable :depth-test)
+    (with-blending *blending-params*
+      (map-g #'draw-rttconsole *console-stream*
+             :model->clip #.(m4:translation (v! 0 0 0))
+             :fac 0.95
+             :tex *rtt-texture*)))
 
   (gl:enable :depth-test)
   (gl:depth-func :less)
@@ -1006,18 +1022,15 @@
     (setf *console-data* (make-gpu-array d :element-type 'g-pnt)
           *console-index* (make-gpu-array i :element-type :ushort)
           *console-stream* (make-buffer-stream *console-data* :index-array *console-index*)
-          *console-texture* (cepl.devil:load-image-to-texture
-                             (merge-pathnames "console.png" *game-dir*)))))
-
-(defun reload-textures ()
-  (setf *console-texture* (cepl.devil:load-image-to-texture
-                           (merge-pathnames "console.png" *game-dir*))))
+          *console-texture* (sample
+                             (cepl.devil:load-image-to-texture
+                              (merge-pathnames "console.png" *game-dir*))))))
 
 (defun controls-rolling-p ()
   (skitter:mouse-down-p 3))
 
 (defun current-gl-window ()
-  jungl::*gl-window*)
+  cepl.internals:*gl-window*)
 
 (defun mouse-pov (event)
   (let ((d (skitter:xy-pos-vec event)))
@@ -1350,8 +1363,10 @@
     (when (skitter:key-down-p key.l)
       (setq *lighting-enabled* (not *lighting-enabled*)))
 
-    #+nil
+    ;;#+nil
     (progn
+      (when (skitter:key-down-p key.t)
+        (setq *use-rtt* (not *use-rtt*)))
       (when (skitter:key-down-p key.m)
         (setq *normal-mapping-enabled* (not *normal-mapping-enabled*)))
       (when (skitter:key-down-p key.t)
@@ -1584,7 +1599,8 @@
   (defun run-loop ()
     (setq *camera* (make-camera))
     (setq *cull-test-fov-cos* (cos (* 1.2 (fov *camera*))))
-    (init-render-to-texture)
+    (when *use-rtt*
+      (init-render-to-texture))
     (init-sphere)
     (init-console)
     (init-sky-data)
