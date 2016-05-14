@@ -44,9 +44,12 @@
   (let ((str (princ-to-string c)))
     (gethash str *glyph-sizes*)))
 
+(defvar *overlay-changed* nil)
+
 (defvar *paused* nil)
 (defvar *was-paused* nil)
 (defun pause ()
+  (setq *overlay-changed* t)
   (when *paused*
     (setq *was-paused* t))
   (setq *paused* (not *paused*)))
@@ -326,6 +329,17 @@
 
 (defpipeline draw-console () (g-> #'console-vert #'console-frag))
 
+(defun-g rttconsole-vert ((vert g-pnt) &uniform (model->clip :mat4))
+  (values
+   (* model->clip (v! (pos vert) 1))
+   (norm vert)
+   (tex vert)))
+
+(defun-g rttconsole-frag ((norm :vec3) (tc :vec2) &uniform (tex :sampler-2d) (fac :float))
+  (* fac (v! (s~ (texture tex (v! (v:x tc) (- 1 (v:y tc)))) :xyzw))))
+
+(defpipeline draw-rttconsole () (g-> #'rttconsole-vert #'rttconsole-frag))
+
 
 ;;;;;;;;;;;;;; text ;;;;;;;;;;;;;;;;;;;
 
@@ -334,6 +348,19 @@
    (* model->clip (v! (pos vert) (/ 1 size)))
    (norm vert)
    (tex vert)))
+
+(defun-g normal-text-frag ((norm :vec3) (tc :vec2)
+                    &uniform
+                    (tex :sampler-2d)
+                    (fac :float)
+                    (col :vec3))
+  (let* ((texel (texture tex tc))
+         (i (v:x texel))
+         (w (v:w texel)))
+    (v! (* (v:x col) i)
+        (* (v:y col) i)
+        (* (v:z col) i)
+        (* fac w))))
 
 (defun-g text-frag ((norm :vec3) (tc :vec2)
                     &uniform
@@ -346,7 +373,9 @@
     (v! (* (v:x col) i)
         (* (v:y col) i)
         (* (v:z col) i)
-        (* fac w))))
+        (clamp
+         (* 1.3 (sqrt w))
+         0.0 1.0))))
 
 (defpipeline draw-text () (g-> #'text-vert #'text-frag))
 
@@ -545,51 +574,51 @@
 
 (defun calc-glyph-x-size (c glyph-size)
   (let ((x-size (car glyph-size)))
-    (if (= 0 x-size)
-        (case c
-          (#\Space (* 0.25 (/ *base-glyph-array-size* *glyph-array-size*)))
-          (t 0))
-        ;; fix sizes of various glyphs
-        (case c
-          (#\w
-           (* 0.45 (/ *base-glyph-array-size* *glyph-array-size*)))
-          (#\W
-           (* 0.60 (/ *base-glyph-array-size* *glyph-array-size*)))
-          (#\V
-           (* 0.38 (/ *base-glyph-array-size* *glyph-array-size*)))
-          (#\Y
-           (* 0.40 (/ *base-glyph-array-size* *glyph-array-size*)))
-          (#\A
-           (* 0.40 (/ *base-glyph-array-size* *glyph-array-size*)))
-          (#\O
-           (* 0.50 (/ *base-glyph-array-size* *glyph-array-size*)))
-          (#\y
-           (* 0.32 (/ *base-glyph-array-size* *glyph-array-size*)))
-          (#\1
-           (* 0.3 (/ *base-glyph-array-size* *glyph-array-size*)))
-          (#\.
-           (* 0.2 (/ *base-glyph-array-size* *glyph-array-size*)))
-          (t
-           x-size)))))
+    (flet ((glyph-size (x)
+             (* x (/ *base-glyph-array-size* *glyph-array-size*))))
+      (if (= 0 x-size)
+          (case c
+            (#\Space (glyph-size 0.25))
+            (t 0))
+          ;; fix sizes of various glyphs
+          (case c
+            (#\w (glyph-size 0.45))
+            (#\W (glyph-size 0.60))
+            (#\V (glyph-size 0.38))
+            (#\Y (glyph-size 0.40))
+            (#\A (glyph-size 0.40))
+            (#\O (glyph-size 0.50))
+            (#\y (glyph-size 0.32))
+            (#\1 (glyph-size 0.30))
+            (#\I (glyph-size 0.15))
+            (#\i (glyph-size 0.15))
+            (#\. (glyph-size 0.20))
+            (#\/ (glyph-size 0.18))
+            (t x-size))))))
 
-(defun calc-text-width (str &optional (size 1.0))
+(defvar *scrolling-help* t)
+(defvar *funky* nil)
+(defvar *funky-y* -1.0)
+
+(defun calc-text-width (str &key (size 1.0) (nowrap nil))
   (let ((pos-x -0.90)
         (pos-y 0.80)
         (text-width 0.0)
+        (x-size (* (if *funky* 0.16 0.11) size))
         widths)
     (loop for c across str
        do
          (let* ((glyph-texture (get-glyph c))
                 (glyph-size (get-glyph-size c))
-                (dx (* 0.11 size (calc-glyph-x-size c glyph-size)))
+                (dx (* x-size (calc-glyph-x-size c glyph-size)))
                 (new-x (+ pos-x dx))
                 (new-y pos-y))
            (declare (ignore glyph-texture))
-           (when (or (> new-x 1.00)
+           (when (or (and (> new-x 1.00) (not nowrap))
                      (char= c #\Newline))
              (push text-width widths)
-             (setq text-width 0.0)
-             (setf new-x -0.90)
+             (setq text-width 0.0
+                   new-x -0.90)
              (decf new-y (* 0.08 size (/ *base-glyph-array-size* *glyph-array-size*))))
            (setf pos-x new-x
                  pos-y new-y)
@@ -598,16 +627,11 @@
         (values (apply #'max widths) (nreverse (push text-width widths)))
         (values text-width (list text-width)))))
 
-(defvar *scrolling-help* t)
-(defvar *funky* nil)
-(defvar *funky-y* -1.0)
-
-(defun render-text (text-string &key (x -0.90) (y 0.80) (color (v! 1 1 1)) (size 1.0) (transparency 0.8))
+(defun render-text (text-string &key (x -0.90) (y 0.80) (color (v! 1 1 1)) (size 1.0) (transparency 0.8) (nowrap nil))
   (multiple-value-bind (maximum widths)
       (if (keywordp x)
-          (calc-text-width text-string)
+          (calc-text-width text-string :nowrap nowrap)
           (values x (list x)))
-    (declare (ignore maximum))
     (let ((alignment (cond ((eq :right x) :right)
                            ((eq :center x) :center)
                            ((eq :left x) :left)
@@ -615,9 +639,7 @@
       (labels ((start-x ()
                  (cond
                    ((eq :right alignment)
-                    (- 1.00 (let ((max (apply #'max widths)))
-                              (pop widths)
-                              max)))
+                    (- 1.00 maximum))
                    ((eq :center alignment)
                     (- 0.04 (* 0.5 (or (pop widths) 0.0))))
                    (t ;;(eq :left alignment)
@@ -633,10 +655,10 @@
                         (glyph-size (get-glyph-size c))
                         (this-x pos-x)
                         (this-y pos-y)
-                        (dx (* (if *funky* 0.13 0.11) size (calc-glyph-x-size c glyph-size)))
+                        (dx (* (if *funky* 0.16 0.11) size (calc-glyph-x-size c glyph-size)))
                         (new-x (+ pos-x dx))
                         (new-y pos-y))
-                   (when (or (> new-x 1.00)
+                   (when (or (and (> new-x 1.00) (not nowrap))
                              (char= c #\Newline))
                      (setf new-x (start-x))
                      (decf new-y (* (if *funky* 0.10 0.08) size (/ *base-glyph-array-size* *glyph-array-size*))))
@@ -660,7 +682,7 @@
                             :tex glyph-texture))))))))))
 
 ;; not much faster...
-(defun render-text-faster (text-string &key (x -0.90) (y 0.80) (color (v! 1 1 1)) (size 1.0) (transparency 0.8) (funky *funky*))
+(defun render-text-faster (text-string &key (x -0.90) (y 0.80) (color (v! 1 1 1)) (size 1.0) (transparency 0.8) (funky *funky*) (nowrap nil))
   (with-blending *blending-params*
     (let* ((pos-x x)
            (pos-y y)
@@ -675,7 +697,7 @@
                   (dx (* (if funky 0.13 0.11) size (calc-glyph-x-size c glyph-size)))
                   (new-x (+ pos-x dx))
                   (new-y pos-y))
-             (when (or (and (not funky) (> new-x 1.00))
+             (when (or (and (> new-x 1.00) (not nowrap))
                        (char= c #\Newline))
                (setf new-x x)
                (decf new-y (* (if funky 0.10 0.08) size (/ *base-glyph-array-size* *glyph-array-size*)))
@@ -777,32 +799,52 @@
            :fac 1
            :tex *rings-texture*)))
 
-(defun step-gl ()
-  (unless *paused*
-    (incf *rotation-factor* (* 0.01)))
+(defvar *rtt-framebuffer* nil)
+(defvar *rtt-texture* nil)
+(defvar *rtt-width* 1920)
+(defvar *rtt-height* 1080)
 
+(defun init-render-to-texture ()
+  (let* ((framebuffer (first (gl:gen-framebuffers 1)))
+         (jungl-texture (jungl:make-texture
+                         nil
+                         :dimensions (list *rtt-width* *rtt-height*)
+                         :element-type :rgba8))
+         (gl-texture (jungl::texture-id jungl-texture)))
+    (gl:bind-framebuffer :framebuffer framebuffer)
+    (gl:bind-texture :texture-2d gl-texture)
+    (gl:framebuffer-texture-2d :framebuffer
+                               :color-attachment0
+                               :texture-2d
+                               gl-texture
+                               0)
+    (gl:draw-buffers (list :color-attachment0))
+
+    ;; validate framebuffer
+    (let ((framebuffer-status (gl:check-framebuffer-status :framebuffer)))
+      (unless (gl::enum= framebuffer-status :framebuffer-complete)
+        (error "Framebuffer status: ~A." framebuffer-status)))
+
+    (setq *rtt-framebuffer* framebuffer
+          *rtt-texture* jungl-texture)))
+
+(defmacro text-setf (&rest rest)
+  `(progn
+     (setq *overlay-changed* t)
+     (setf ,@rest)))
+
+(defun render-overlay ()
+  (gl:bind-framebuffer :framebuffer *rtt-framebuffer*)
+  (gl:viewport 0 0 *rtt-width* *rtt-height*)
   (clear)
-  (render-sky)
-
-  (with-blending *blending-params*
-    (dolist (gl-planet *gl-planets*)
-      (let ((box (gl-planet-box gl-planet)))
-        (setf (box-rot box)
-              (q:* (q:from-axis-angle (v! 0 0 1) (* (gl-planet-day gl-planet) *rotation-factor*
-                                                    (/ *time-acceleration* (* 24 60 60))))
-                   ;; align with the texture
-                   #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float))))
-        (render-planet gl-planet *rotation-factor*)))
-    (when *gl-saturn*
-      (render-rings *gl-saturn* *rotation-factor*)))
-
+  ;;(render-sky)
   (gl:depth-func :lequal)
   (gl:disable :depth-test)
   (when *show-console*
     (with-blending *blending-params*
       (map-g #'draw-console *console-stream*
              :model->clip (m4:translation (v! 0 0 0))
-             :fac 0.5
+             :fac 0.8
              :tex *console-texture*)))
   (when *console-text*
     (render-text *console-text*)
@@ -838,25 +880,29 @@
                    *funky* nil
                    *funky-y* -1.0))
            (when *funky*
-             (render-text (format nil "PLUTO STRIKES BACK")
+             (render-text "PLUTO STRIKES BACK"
                           :x :center
                           :y 0.5
                           :transparency transparency
                           :color color)
-             (render-text (format nil "Lonely and no longer considered the ninth planet,~% PLUTO launches a daring plan using F = ma.")
+             (render-text #.(format nil "Lonely and no longer considered the ninth planet,~% PLUTO launches a daring plan using F = ma.")
                           ;;:x :left
                           :y 0.3
                           :transparency transparency
+                          :nowrap t
                           :color color)))
-         (render-text (format nil "CLICK MOUSE BUTTON TO PLAY")
+         (render-text "CLICK MOUSE BUTTON TO PLAY"
                       :x :center
                       :y 0.0
                       :transparency transparency
+                      :nowrap t
                       :color color)
-         (render-text-faster (format nil "HOLD MOUSE BUTTON DOWN TO ACCELERATE TOWARDS CURSOR POSITION")
+         (render-text-faster "HOLD MOUSE BUTTON DOWN TO ACCELERATE TOWARDS CURSOR POSITION"
                              :size 0.6
+                             :y -0.1
+                             :nowrap t
                              :transparency transparency
-                             :y -0.1 :color color)
+                             :color color)
          (render-text-faster #.(format nil
                                        #.(concatenate
                                           'string
@@ -876,16 +922,17 @@
                              :x -0.9
                              :y -0.2
                              :transparency transparency
+                             :nowrap t
                              :color color))))
     (cond
       (*hit-sun*
-       (render-text (format nil "GAME OVER")
+       (render-text "GAME OVER"
                     :x :center :y 0.5 :color (v! 1 0 0)))
       (*hit-other*
        (render-text (format nil "YOU WIN~%Collided with ~A"
                             (slot-value *hit-other* 'name))
                     :x :center :y 0.5 :color (v! 0 1 0))
-       (render-text (Format nil "~%~%with remaining fuel ~,1f"
+       (render-text (format nil "~%~%with remaining fuel ~,1f"
                             *fuel-remaining*)
                     :x :center :y 0.5 :color (if *cheated* (v! 0.5 0.5 0.5) (v! 0 1 0))))
       (*colliding*
@@ -894,6 +941,52 @@
     (when *paused*
       (render-text "PAUSED" :x :center :y 0.3 :color (v! 1 1 0))
       (render-text "PRESS SPACE TO CONTINUE" :x :center :y 0.2)))
+  ;;(swap)
+  )
+
+(defvar *cull-test-fov-cos* nil)
+
+(defun step-gl ()
+  (unless *paused*
+    (incf *rotation-factor* (* 0.01)))
+
+  (clear)
+  (render-sky)
+
+  (with-blending *blending-params*
+    (dolist (gl-planet *gl-planets*)
+      (let ((box (gl-planet-box gl-planet)))
+        (setf (box-rot box)
+              (q:* (q:from-axis-angle (v! 0 0 1) (* (gl-planet-day gl-planet) *rotation-factor*
+                                                    (/ *time-acceleration* (* 24 60 60))))
+                   ;; align with the texture
+                   #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float))))
+        (if *cull-test-fov-cos*
+            (let ((dot (v3:dot (v3:normalize (v3:- (box-pos box) (pos *camera*))) (dir *camera*))))
+              (when (>= dot *cull-test-fov-cos*)
+                (render-planet gl-planet *rotation-factor*)))
+            (render-planet gl-planet *rotation-factor*))))
+    (when *gl-saturn*
+      (if *cull-test-fov-cos*
+          (let ((box (gl-planet-box *gl-saturn*)))
+            (let ((dot (v3:dot (v3:normalize (v3:- (box-pos box) (pos *camera*))) (dir *camera*))))
+              (when (>= dot *cull-test-fov-cos*)
+                (render-rings *gl-saturn* *rotation-factor*))))
+          (render-rings *gl-saturn* *rotation-factor*))))
+
+  (when *overlay-changed*
+    (render-overlay)
+    (let ((res (jungl:viewport-resolution (jungl:current-viewport))))
+      (gl:bind-framebuffer :framebuffer 0)
+      (gl:viewport 0 0 (car res) (cadr res))))
+
+  (gl:depth-func :lequal)
+  (gl:disable :depth-test)
+  (with-blending *blending-params*
+    (map-g #'draw-rttconsole *console-stream*
+           :model->clip (m4:translation (v! 0 0 0))
+           :fac 0.8
+           :tex *rtt-texture*))
 
   (gl:enable :depth-test)
   (gl:depth-func :less)
@@ -923,6 +1016,9 @@
 (defun controls-rolling-p ()
   (skitter:mouse-down-p 3))
 
+(defun current-gl-window ()
+  jungl::*gl-window*)
+
 (defun mouse-pov (event)
   (let ((d (skitter:xy-pos-vec event)))
     (let ((change (v2:*s (v! (- (v:x d) *mouse-x-pos*)
@@ -931,12 +1027,10 @@
       (if (or (> (- (v:x d) *mouse-x-pos*) 100)
               (> (* -1 (- (v:y d) *mouse-y-pos*)) 100))
           (setq change (v! 0 0)))
-      (sdl2:warp-mouse-in-window jungl::*gl-window* *mouse-x-pos* *mouse-y-pos*)
+      (sdl2:warp-mouse-in-window (current-gl-window) *mouse-x-pos* *mouse-y-pos*)
       (if (controls-rolling-p)
           ;; roll
-          (let* ((up (v3:normalize
-                      (v3:- (world-up *camera*)
-                            (v3:*s (dir *camera*) (v3:dot (world-up *camera*) (dir *camera*))))))
+          (let* ((up (world-up *camera*))
                  (forward (dir *camera*))
                  (rotx (m4:rotation-from-axis-angle forward (* 1 (v:x change))))
                  (side (v3:cross (dir *camera*) up))
@@ -945,9 +1039,7 @@
             (setf (dir *camera*) (m4:*v3 roty (dir *camera*)))
             (setf (world-up *camera*) (m4:*v3 roty (world-up *camera*))))
           ;; normal movement
-          (let* ((up (v3:normalize
-                      (v3:- (world-up *camera*)
-                            (v3:*s (dir *camera*) (v3:dot (world-up *camera*) (dir *camera*))))))
+          (let* ((up (world-up *camera*))
                  (rotx (m4:rotation-from-axis-angle up (* -1 (v:x change))))
                  (side (v3:cross (dir *camera*) up))
                  (roty (m4:rotation-from-axis-angle side (v:y change))))
@@ -1023,22 +1115,22 @@
 (defun follow (obj)
   (setq *following* obj)
   (when *following*
-    (setq *camera-text* (format nil "Following ~A~A"
-                                (slot-value *following* 'name)
-                                (if *follow-sun-lock* "-Sun" "")))
+    (text-setf *camera-text* (format nil "Following ~A~A"
+                                     (slot-value *following* 'name)
+                                     (if *follow-sun-lock* "-Sun" "")))
     (camera-follow-start *following*)))
 
 (defun unfollow ()
   (when *following*
     (setq *last-followed* *following*)
     (setq *following* nil)
-    (setq *camera-text* "")))
+    (text-setf *camera-text* "")))
 
 (defun camera-change (name &optional (up (v! 0.0 0.0 1.0)))
   (setf (fov *camera*) (coerce (/ pi 3) 'single-float))
   (setf (world-up *camera*) up)
   (unfollow)
-  (setq *camera-text* name))
+  (text-setf *camera-text* name))
 
 (defun camera-1 ()
   (setf (pos *camera*) (v! 0.0 50.0 0.0)
@@ -1103,7 +1195,8 @@
 
 (defun init-sim ()
   (setq *time-acceleration* (* 24 60 60))
-  (setq *epoch-time* (- (get-universal-time) (encode-universal-time 0 0 0 1 1 2000))))
+  (setq *epoch-time* (- (get-universal-time) #.(encode-universal-time 0 0 0 1 1 2000)))
+  (tanstaafl-main-loop-step 0))
 
 (defun reset-planets ()
   (init-gl-planets)
@@ -1113,7 +1206,7 @@
 
 (defun reset-sim ()
   (setq *following* nil)
-  (setq *camera-text* "")
+  (text-setf *camera-text* "")
   (setq *use-vsop* *vsop-available*)
   (init-gl-planets)
   (init-planets)
@@ -1153,6 +1246,7 @@
         (when *vessel*
           (unless (or (skitter:mouse-down-p 1) (skitter:mouse-down-p 2)) ;; left button is 1 on my system
             (when (> (fuel-remaining *vessel*) 0)
+              (setq *overlay-changed* t)
               (decf (fuel-remaining *vessel*) (fps-multiplier 10))
               (when (<= (fuel-remaining *vessel*) 0)
                 (setf (fuel-remaining *vessel*) +0.0))
@@ -1161,6 +1255,7 @@
       (when (or (skitter:mouse-down-p 1) (skitter:mouse-down-p 2)) ;; left button is 1 on my system
         (when *vessel*
           (when (> (fuel-remaining *vessel*) 0)
+            (setq *overlay-changed* t)
             (decf (fuel-remaining *vessel*) (fps-multiplier 10))
             (when (<= (fuel-remaining *vessel*) 0)
               (setf (fuel-remaining *vessel*) +0.0))
@@ -1217,6 +1312,7 @@
 
     (when (skitter:key-down-p key.h)
       (when *targeting*
+        (setq *overlay-changed* t)
         (setq *scrolling-help* nil)
         (setq *hide-help* (not *hide-help*))
         (setq *show-help* (not *hide-help*))))
@@ -1231,13 +1327,13 @@
       (if *is-fullscreen*
           (progn
             (sdl2:show-cursor)
-            (sdl2:set-window-fullscreen jungl::*gl-window* nil)
+            (sdl2:set-window-fullscreen (current-gl-window) nil)
             (set-original-window-size))
           (progn
             (unless *targeting*
               (sdl2:hide-cursor))
             (set-fullscreen-window-size)
-            (sdl2:set-window-fullscreen jungl::*gl-window* :windowed)))
+            (sdl2:set-window-fullscreen (current-gl-window) :windowed)))
       (setq *is-fullscreen* (not *is-fullscreen*)))
 
     (when (skitter:key-down-p key.escape)
@@ -1313,9 +1409,9 @@
     (if *following*
         (when event
           (setq *follow-sun-lock* (not *follow-sun-lock*))
-          (setq *camera-text* (format nil "Following ~A~A"
-                                      (slot-value *following* 'name)
-                                      (if *follow-sun-lock* "-Sun" ""))))))
+          (text-setf *camera-text* (format nil "Following ~A~A"
+                                           (slot-value *following* 'name)
+                                           (if *follow-sun-lock* "-Sun" ""))))))
   (let ((movement-scale
          (* (if (skitter:key-down-p key.lshift) 10 1)
             (if *sun-actual-size* #.(/ 5.0 109.0) 1)
@@ -1327,6 +1423,7 @@
         (labels ((thrust ()
                    (setf (reverse-thrust *vessel*) nil)
                    (when (> (fuel-remaining *vessel*) 0)
+                     (setq *overlay-changed* t)
                      (decf (fuel-remaining *vessel*) (fps-multiplier 10))
                      (when (<= (fuel-remaining *vessel*) 0)
                        (setf (fuel-remaining *vessel*) +0.0))
@@ -1400,37 +1497,40 @@
     (incf fps-frames)
     (let* ((now (get-internal-real-time))
            (elapsed-time (/ (- now fps-start-time) internal-time-units-per-second)))
-      (setq fps (/ fps-frames elapsed-time))
+      (setq fps (if (= 0 elapsed-time) 1 (/ fps-frames elapsed-time)))
       (setq *fps* fps)
       (when (> elapsed-time update-interval)
-        (setq *fps-text* (format nil "FPS: ~,1f" fps))
-        (setq *console-text*
-              (format nil "~A ~A" *fps-text*
-                      (format nil "~%step: ~,2f days/s~%VSOP87: ~A~%"
-                              (/ *time-acceleration* (* 24 60 60))
-                              (if *use-vsop* "on" "off")
-                              ;;(if *normal-mapping-enabled* "NM on" "NM off")
-                              ;;(if *tangent-function* " (tan)" "")
-                              )))
+        (text-setf *fps-text* (format nil "FPS: ~,1f" fps))
+        (text-setf *console-text*
+                   (format nil "~A ~A" *fps-text*
+                           (format nil "~%step: ~,2f days/s~%VSOP87: ~A~%"
+                                   (/ *time-acceleration* (* 24 60 60))
+                                   (if *use-vsop* "on" "off")
+                                   ;;(if *normal-mapping-enabled* "NM on" "NM off")
+                                   ;;(if *tangent-function* " (tan)" "")
+                                   )))
         (setf fps-frames 0
               fps-start-time (get-internal-real-time))))))
 
+(defvar *prev-date-text* nil)
 (defun update-console ()
-  #+nil
-  (let ((d (distance *earth* *sun*)))
-    (* d 0.0000000001))
   (multiple-value-bind (s min h d m y)
       (decode-universal-time
-       (+ (encode-universal-time 0 0 0 1 1 2000)
+       (+ #.(encode-universal-time 0 0 0 1 1 2000)
           (round *epoch-time*)))
     (declare (ignore s min h))
-    (setq *date-text* (format nil "~D/~2,'0D/~2,'0D" y m d)))
+    (let ((date-text (format nil "~D/~2,'0D/~2,'0D" y m d)))
+      (when (or (null *prev-date-text*)
+                (not (string= *prev-date-text* date-text)))
+        (text-setf *date-text* (setq *prev-date-text* date-text)))))
   (fps-display))
 
 (defun %run-loop ()
   (continuable   
+    (setq *overlay-changed* *scrolling-help*)
     (step-host)
     (update-repl-link)
+    (%keyboard-callback nil nil)
     (unless *paused*
       (if *was-paused*
           (progn
@@ -1440,8 +1540,6 @@
     (when *following*
       (camera-follow *following*))
     (update-positions)
-    (step-gl)
-    (%keyboard-callback nil nil)
     (update-console)
     (when (and *gl-pluto* (> (v3:length (box-pos (gl-planet-box *gl-pluto*))) 800))
       ;; too far away
@@ -1462,10 +1560,9 @@
       (setq *scrolling-help* nil)
       (setq *funky-y* -1.0)
       (setq *show-help* t))
-    (when *hide-help*
+    (when (or *hide-help* (not *targeting*))
       (setq *show-help* nil))
-    (unless *targeting*
-      (setq *show-help* nil))
+    (step-gl)
     (fps-limit-delay)))
 
 (defun %window-callback (event timestamp)
@@ -1486,11 +1583,13 @@
 (let ((running t))
   (defun run-loop ()
     (setq *camera* (make-camera))
+    (setq *cull-test-fov-cos* (cos (* 1.2 (fov *camera*))))
+    (init-render-to-texture)
     (init-sphere)
     (init-console)
     (init-sky-data)
     (init-text)
-    (init-font (merge-pathnames "fonts/FreeSans.ttf" *game-dir*))
+    (init-font (merge-pathnames "FreeSans.ttf" (merge-pathnames "fonts/" *game-dir*)))
     (enable-sky)
     (init-sim)
     (reset-camera)
@@ -1502,7 +1601,7 @@
       (unless *targeting*
         (sdl2:hide-cursor))
       (set-fullscreen-window-size)
-      (sdl2:set-window-fullscreen jungl::*gl-window* :windowed))
+      (sdl2:set-window-fullscreen (current-gl-window) :windowed))
 
     (fps-limit-init)
     
@@ -1524,13 +1623,13 @@
     (format t "width/height: ~S/~S~%" w h)
     (if (not (or (not (numberp w)) (not (numberp h))
                  (<= w 0) (<= h 0)))
-        (sdl2:set-window-size jungl::*gl-window* w h))))
+        (sdl2:set-window-size (current-gl-window) w h))))
 
 (defvar *original-width* 640)
 (defvar *original-height* 480)
 (defun set-original-window-size ()
   (format t "original width/height: ~S/~S~%" *original-width* *original-height*)
-  (sdl2:set-window-size jungl::*gl-window* *original-width* *original-height*))
+  (sdl2:set-window-size (current-gl-window) *original-width* *original-height*))
 
 (defvar *loaded-ft* nil)
 
@@ -1554,6 +1653,10 @@
                 height h))))
   (setq *original-width* width
         *original-height* height)
+  (setq *rtt-width* width
+        *rtt-height* height)
+  (setq *mouse-x-pos* (floor (/ width 2))
+        *mouse-y-pos* (floor (/ height 2)))
   (cepl:repl width height)
   (run-loop))
 
