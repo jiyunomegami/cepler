@@ -407,8 +407,11 @@
 
 
 ;;;;;;;;;;; sphere without lighting ;;;;;;;;;;;;;;;;
+;;; why is this called with a zero length pos?
 (defun-g sphere-vert ((vert g-pnt) &uniform (model->clip :mat4) (radius :float))
-  (values (* model->clip (v! (pos vert) (/ 1 radius)))
+  (values (if (= (length (pos vert)) 0)
+              (v! 0.0 0.0 -1.0 0.0)
+              (* model->clip (v! (pos vert) (/ 1 radius))))
           (norm vert)
           (tex vert)
           (pos vert)))
@@ -419,7 +422,8 @@
 
 ;; prevent artifacts at seam
 (defun-g sphere-frag ((norm :vec3) (tc :vec2) (vert :vec3) &uniform (tex :sampler-2d) (fac :float))
-  (let* ((%tc (v! (/ (+ 3.14159 (atan (v:x vert) (v:z vert))) (* 2 3.14159))
+  (let* ((pos vert)
+         (%tc (v! (/ (+ 3.1415927 (atan (v:x pos) (v:z pos))) (* 2 3.1415927))
                   (v:y tc)))
          (texel (texture tex %tc 1)))
     (v! (s~ texel :xyz) (* (v:w texel) fac))))
@@ -439,7 +443,9 @@
                   &uniform
                   (model->clip :mat4)
                   (radius :float))
-  (values (* model->clip (v! (pos data) (/ 1 radius)))
+  (values (if (= (length (pos data)) 0)
+              (v! 0.0 0.0 -1.0 0.0)
+              (* model->clip (v! (pos data) (/ 1 radius))))
           (pos data)
           (norm data)
           (v! 0.5 0.5 0.5 0)
@@ -462,7 +468,7 @@
          (cos-ang-incidence
           (clamp (dot (normalize vertex-normal) light-dir)
                  0.0 1.0))
-         (%tex-coord (v! (/ (+ 3.14159 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.14159))
+         (%tex-coord (v! (/ (+ 3.1415927 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.1415927))
                          (v:y tex-coord)))
          (t-col (texture tex %tex-coord)))
     (+ (* t-col light-intensity cos-ang-incidence)
@@ -479,7 +485,7 @@
                   (ambient-intensity :vec4)
                   (tex :sampler-2d)
                   (norm-map :sampler-2d))
-  (let* ((%tex-coord (v! (/ (+ 3.14159 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.14159))
+  (let* ((%tex-coord (v! (/ (+ 3.1415927 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.1415927))
                          (v:y tex-coord)))
          (full-tangent-norm (- (* (s~ (texture norm-map %tex-coord) :xyzw) 2)
                                (v! 1 1 1 1)))
@@ -516,7 +522,7 @@
                     (norm-map :sampler-2d))
   (let* ((tex-size (texture-size tex 0))
          (bump-dimensions (texture-size norm-map 0))
-         (%tex-coord (v! (/ (+ 3.14159 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.14159))
+         (%tex-coord (v! (/ (+ 3.1415927 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.1415927))
                          (v:y tex-coord)))
          (temp (- model-space-pos
                   model-space-light-pos))
@@ -600,6 +606,9 @@
 
 (defun render-planet (gl-planet factor)
   (when (gl-planet-clouds-texture gl-planet)
+    (gl:disable :depth-test)
+    (gl:enable :cull-face)
+    #+nil
     (setf (near *camera*) 100.0))
   (if *lighting-enabled*
       (let* ((norm-map (gl-planet-normal-texture gl-planet))
@@ -629,6 +638,8 @@
              :tex (gl-planet-texture gl-planet)))
   (when (gl-planet-clouds-texture gl-planet)
     (render-clouds gl-planet factor)
+    (gl:enable :depth-test)
+    #+nil
     (setf (near *camera*) 1.0)))
 
 (defun calc-glyph-x-size (c glyph-size)
@@ -1010,6 +1021,9 @@
   (clear)
 
   (render-sky)
+
+  ;; to disable backface culling
+  ;;(gl:disable :cull-face)
 
   (with-blending *blending-params*
     (dolist (gl-planet *gl-planets*)
@@ -1411,10 +1425,7 @@
       (when (skitter:key-down-p key.t)
         (setq *use-rtt* (not *use-rtt*)))
       (when (skitter:key-down-p key.m)
-        (setq *normal-mapping-enabled* (not *normal-mapping-enabled*)))
-      #+nil
-      (when (skitter:key-down-p key.n)
-        (setq *tangent-function* (not *tangent-function*))))
+        (setq *normal-mapping-enabled* (not *normal-mapping-enabled*))))
 
     (when (skitter:key-down-p key.q)
       (if (< *time-acceleration* 0)
@@ -1566,7 +1577,6 @@
                                    (/ *time-acceleration* (* 24 60 60))
                                    (if *use-vsop* "on" "off")
                                    ;;(if *normal-mapping-enabled* "NM on" "NM off")
-                                   ;;(if *tangent-function* " (tan)" "")
                                    )))
         (setf fps-frames 0
               fps-start-time (get-internal-real-time))))))
