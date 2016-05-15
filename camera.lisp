@@ -97,7 +97,7 @@
             (m4:melm result 2 3) (aref eye-inv 2))
       result)))
 
-(defun make-camera (&optional (frame (cepl.viewports:current-viewport))
+(defun make-camera (&key (frame (cepl.viewports:current-viewport))
                       (near 1.0) (far 1000.0) (fov #.(coerce (/ pi 3) 'single-float))
                       (cam->clip-function #'rtg-math.projection:perspective))
   (let* ((frame

@@ -56,23 +56,45 @@
     (setq *was-paused* t))
   (setq *paused* (not *paused*)))
 
-;; a box is just the position and the rotation quaternion.
-;; left over from the cepl example.
-(defstruct box
-  (pos (v! 0 0 -10))
-  (rot (q:identity)))
+(defclass gl-object ()
+  ((pos :initform #.(v! 0 0 0)
+        :initarg :pos
+        :accessor pos)
+   (rot :initform #.(q:identity)
+        :initarg :rot
+        :accessor rot)))
 
-(defstruct gl-planet
-  (name "")
-  (radius 1)
-  (day 1)
-  (box (make-box))
-  (data)
-  (index)
-  (stream)
-  (texture)
-  (normal-texture)
-  (bump-texture))
+(defclass gl-planet (gl-object)
+  ((name :initform ""
+         :initarg :name
+         :accessor gl-planet-name)
+   (radius :initform 1
+           :initarg :radius
+           :accessor gl-planet-radius)
+   (day :initform 1
+        :initarg :day
+        :accessor gl-planet-day)
+   (data :initform nil
+         :initarg :data
+         :accessor :gl-planet-day)
+   (index :initform nil
+          :initarg :index
+          :accessor gl-planet-index)
+   (stream :initform nil
+          :initarg :stream
+          :accessor gl-planet-stream)
+   (texture :initform nil
+            :initarg :texture
+            :accessor gl-planet-texture)
+   (normal-texture :initform nil
+                   :initarg :normal-texture
+                   :accessor gl-planet-normal-texture)
+   (bump-texture :initform nil
+                 :initarg :bump-texture
+                 :accessor gl-planet-bump-texture)
+   (clouds-texture :initform nil
+                   :initarg :clouds-texture
+                   :accessor gl-planet-clouds-texture)))
 
 (defvar *gl-planets* nil)
 
@@ -102,15 +124,15 @@
     (unless (equalp name "Sun")
       (setq radius (* (/ 5.00 109) radius))))
   (let ((gl-planet
-         (make-gl-planet
-          :name name
-          :radius radius
-          :day day
-          :box (make-box :pos pos)
-          :data *sphere-data*
-          :index *sphere-index*
-          :stream *sphere-stream*
-          :texture (sample (load-planet-texture texture)))))
+         (make-instance 'gl-planet
+                        :name name
+                        :radius radius
+                        :day day
+                        :pos pos
+                        :data *sphere-data*
+                        :index *sphere-index*
+                        :stream *sphere-stream*
+                        :texture (sample (load-planet-texture texture)))))
     (push gl-planet *gl-planets*)
     gl-planet))
 
@@ -167,9 +189,16 @@
   ;; http://planetpixelemporium.com/venus.html
   "venusmap.jpg" ;;"ven0mss2.jpg"
   ;; http://planetpixelemporium.com/earth.html
+  #-enable-clouds
   (list "earthmap1k.jpg"
         nil
         "earthbump1k.jpg")
+  #+enable-clouds
+  (list
+   "e-8192.jpg"
+   nil
+   "eb-8192.jpg"
+   "clouds.png")
   ;; http://planetpixelemporium.com/mars.html
   (list "mars_1k_color.jpg"
         "mars_1k_normal.jpg")
@@ -201,10 +230,12 @@
         (when tuple
           (let ((texture (car tuple))
                 (normal-map (cadr tuple))
-                (bump-map (caddr tuple)))
+                (bump-map (caddr tuple))
+                (clouds-map (fourth tuple)))
             (setf (gl-planet-texture gl-planet) (sample (load-planet-texture texture dir))
-                  (gl-planet-normal-texture gl-planet) (if normal-map (sample (load-planet-texture normal-map dir)) nil)
-                  (gl-planet-bump-texture gl-planet) (if bump-map (sample (load-planet-texture bump-map dir)) nil))))))))
+                  (gl-planet-normal-texture gl-planet) (when normal-map (sample (load-planet-texture normal-map dir)))
+                  (gl-planet-bump-texture gl-planet) (when bump-map (sample (load-planet-texture bump-map dir)))
+                  (gl-planet-clouds-texture gl-planet) (when clouds-map (sample (load-planet-texture clouds-map dir))))))))))
 
 (defun init-gl-planets ()
   (setq *gl-planets* nil)
@@ -260,7 +291,7 @@
 ;;- - - - - - - - - - - - - - - - - -
 
 (defun model->world (x)
-  (m4:* (m4:translation (box-pos x)) (q:to-mat4 (box-rot x))))
+  (m4:* (m4:translation (pos x)) (q:to-mat4 (rot x))))
 
 (defun world->clip (c)
   (m4:* (cam->clip c) (world->cam c)))
@@ -268,55 +299,28 @@
 (defun model->clip (m c)
   (m4:* (world->clip c) (model->world m)))
 
+(defun pos->clip (pos c)
+  (m4:* (world->clip c) (m4:translation pos)))
+
 (defun model->world-norot (x)
-  (m4:translation (box-pos x)))
+  (m4:translation (pos x)))
 (defun model->clip-norot (m c)
   (m4:* (world->clip c) (model->world-norot m)))
 
-(defun cam-light-model->world (x factor gl-planet)
-  (let ((box-pos (box-pos x)))
+(defun cam-light-model->world (factor gl-planet)
+  (let ((pos (pos gl-planet)))
     (m4:* (m4:* (q:to-mat4 (q:*
                             #.(q:from-axis-angle (v! -1 0 0) (coerce (/ pi 2) 'single-float))
                             (q:from-axis-angle (v! 0 0 -1) (* (gl-planet-day gl-planet)
                                                               (/ *time-acceleration* (* 24 60 60))
                                                               factor))))
-                (m4:translation box-pos))
-          (q:to-mat4 (box-rot x)))))
-
-(defvar *tangent-function* t)
-(defvar *tangent-axis* (v! 0 1 0))
-
-(defun cam-light-model->world-tangent (x factor gl-planet)
-  (if *tangent-function*
-      (let ((box-pos (box-pos x)))
-        (m4:*
-         (m4:*
-          (q:to-mat4 (q:from-axis-angle *tangent-axis* (coerce (/ pi 2) 'single-float)))
-          (m4:* (q:to-mat4 (q:*
-                            #.(q:from-axis-angle (v! -1 0 0) (coerce (/ pi 2) 'single-float))
-                            (q:from-axis-angle (v! 0 0 -1) (* (gl-planet-day gl-planet)
-                                                              (/ *time-acceleration* (* 24 60 60))
-                                                              factor))))
-                (m4:translation box-pos)))
-         (q:to-mat4 (box-rot x))))
-      (cam-light-model->world x factor gl-planet)))
-
+                (m4:translation pos))
+          (q:to-mat4 (rot gl-planet)))))
 
 (defvar *blending-params* (make-blending-params))
 (defvar *camera* nil)
 (defvar *rotation-factor* 0)
 (defvar *follow-camera* nil)
-
-(defun-g box-vert ((vert g-pnt) &uniform (model->clip :mat4))
-  (values (* model->clip (v! (pos vert) 1))
-          (norm vert)
-          (tex vert)))
-
-(defun-g box-frag ((norm :vec3) (tc :vec2) &uniform (tex :sampler-2d) (fac :float))
-  (v! (s~ (texture tex (* tc 1)) :xyz) fac))
-
-(def-g-> draw-box () #'box-vert #'box-frag)
-
 
 ;;;;;;;;;;;; console ;;;;;;;;;;;;;;;;;;;
 
@@ -415,9 +419,10 @@
 
 ;; prevent artifacts at seam
 (defun-g sphere-frag ((norm :vec3) (tc :vec2) (vert :vec3) &uniform (tex :sampler-2d) (fac :float))
-  (let ((%tc (v! (/ (+ 3.14159 (atan (v:x vert) (v:z vert))) (* 2 3.14159))
-                 (v:y tc))))
-    (v! (s~ (texture tex (* %tc 1)) :xyz) fac)))
+  (let* ((%tc (v! (/ (+ 3.14159 (atan (v:x vert) (v:z vert))) (* 2 3.14159))
+                  (v:y tc)))
+         (texel (texture tex %tc 1)))
+    (v! (s~ texel :xyz) (* (v:w texel) fac))))
 
 (def-g-> draw-sphere () #'sphere-vert #'sphere-frag)
 
@@ -446,7 +451,6 @@
                     (tex-coord :vec2)
                     &uniform
                     (model->clip :mat4)
-                    (to-tangent :mat4)
                     (model-space-light-pos :vec3)
                     (light-intensity :vec4)
                     (ambient-intensity :vec4)
@@ -470,7 +474,6 @@
                   (tex-coord :vec2)
                   &uniform
                   (model->clip :mat4)
-                  (to-tangent :mat4)
                   (model-space-light-pos :vec3)
                   (light-intensity :vec4)
                   (ambient-intensity :vec4)
@@ -488,8 +491,7 @@
           (normalize (v! (dot temp tangent-normal)
                          (dot temp binormal)
                          (dot temp vertex-normal))))
-         (dummy-light-dir
-          (* -1 (s~ (* to-tangent (v! vertex-normal 1)) :xyz)))
+         (dummy-light-dir (* binormal -1.0))
          (dummy-cos-ang-incidence
           (clamp (dot (normalize tangent-normal) dummy-light-dir)
                  0.0 1.0))
@@ -507,7 +509,6 @@
                     (tex-coord :vec2)
                     &uniform
                     (model->clip :mat4)
-                    (to-tangent :mat4)
                     (model-space-light-pos :vec3)
                     (light-intensity :vec4)
                     (ambient-intensity :vec4)
@@ -517,26 +518,22 @@
          (bump-dimensions (texture-size norm-map 0))
          (%tex-coord (v! (/ (+ 3.14159 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.14159))
                          (v:y tex-coord)))
-         (normal (normalize vertex-normal))
-         (tangent
-          (normalize (s~ (* to-tangent (v! normal 1)) :xyz)))
-         (binormal (normalize (cross normal tangent)))
-         (bumpmap-strength 1.3)
-         (bm0 (v:x (texture norm-map %tex-coord)))
-         (bmup (v:x (texture norm-map (+ %tex-coord (v! 0 (/ 1.0 (v:y bump-dimensions)))))))
-         (bmright (v:x (texture norm-map (+ %tex-coord (v! (/ 1.0 (v:x bump-dimensions)) 0)))))
-         (bump-vector (+ (* (- bmright bm0) tangent)
-                         (* (- bmup bm0) binormal)))
-         (bumped-normal (normalize (+ normal (* bumpmap-strength bump-vector))))
-         (full-tangent-norm (- (* (s~ (texture norm-map %tex-coord) :xyzw) 2)
-                               (v! 1 1 1 1)))
-         (tangent-normal (s~ full-tangent-norm :xyz))
          (temp (- model-space-pos
                   model-space-light-pos))
          (light-dir
           (normalize temp))
-         (dummy-light-dir
-          (* -1 binormal))
+         (dir2 (* light-dir -1.0))
+         (normal (normalize vertex-normal))
+         (tangent (normalize (cross normal dir2)))
+         (binormal (normalize (cross normal tangent)))
+         (bumpmap-strength (* 20.0 (/ (v:x bump-dimensions) 8192.0)))
+         (bm0 (v:x (texture norm-map %tex-coord)))
+         (bmup (v:x (texture norm-map (+ %tex-coord (v! 0 (/ 1.0 (v:y bump-dimensions)))))))
+         (bmright (v:x (texture norm-map (+ %tex-coord (v! (/ 1.0 (v:x bump-dimensions)) 0)))))
+         (bump-vector (+ (* (- bmright bm0) binormal)
+                         (* (- bmup bm0) tangent)))
+         (bumped-normal (normalize (+ normal (* bumpmap-strength bump-vector))))
+         (dummy-light-dir (* binormal -1.0))
          (dummy-cos-ang-incidence
           (clamp (dot bumped-normal dummy-light-dir)
                  0.0 1.0))
@@ -554,13 +551,30 @@
 
 (defvar *normal-mapping-enabled* t)
 
-(defun render-planet (gl-planet factor)
-  (let ((box (gl-planet-box gl-planet)))
+(defun render-clouds (gl-planet factor)
+  (let* ((clouds-texture (gl-planet-clouds-texture gl-planet))
+         (speed 2.5)
+         (radius (* (+ 1.0 (* *gl-scale* 7000.0 1000 2))
+                    (gl-planet-radius gl-planet)))
+         (obj (make-instance 'gl-object
+                             :pos (pos gl-planet)
+                             :rot (rot gl-planet))))
+    (setq factor (* speed factor))
+    (setf (rot obj) (q:* (q:from-axis-angle #.(v! 0 0 1) (* (gl-planet-day gl-planet) factor
+                                                            (/ *time-acceleration* (* 24 60 60))))
+                         ;; align with the texture
+                         #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float))))
     (if *lighting-enabled*
-        (let* ((norm-map (gl-planet-normal-texture gl-planet))
-               (bump-map (gl-planet-bump-texture gl-planet))
-               (to-model-space-transformation (cam-light-model->world box factor gl-planet))
-               (to-tangent (cam-light-model->world-tangent box factor gl-planet))
+        (let* ((norm-map nil)
+               (bump-map nil)
+               (to-model-space-transformation
+                (m4:* (m4:* (q:to-mat4 (q:*
+                                        #.(q:from-axis-angle (v! -1 0 0) (coerce (/ pi 2) 'single-float))
+                                        (q:from-axis-angle #.(v! 0 0 -1) (* (gl-planet-day gl-planet)
+                                                                            (/ *time-acceleration* (* 24 60 60))
+                                                                            factor))))
+                            (m4:translation (pos obj)))
+                      (q:to-mat4 (rot obj))))
                (cam-light-vec (m4:*v to-model-space-transformation
                                      (v! (pos *light*) 1.0))))
           (map-g (cond
@@ -569,21 +583,53 @@
                    ((and *normal-mapping-enabled* bump-map)
                     #'frag-point-light-bump)
                    (t
-                     #'frag-point-light-nonm))
+                    #'frag-point-light-nonm))
                  (gl-planet-stream gl-planet)
-                 :model->clip (model->clip box *camera*)
-                 :radius (gl-planet-radius gl-planet)
+                 :model->clip (model->clip obj *camera*)
+                 :radius radius
                  :model-space-light-pos (v:s~ cam-light-vec :xyz)
-                 :to-tangent to-tangent
-                 :light-intensity (v4:*s (v! 1 1 1 0) 1.5)
-                 :ambient-intensity (v! 0.2 0.2 0.2 1.0)
-                 :norm-map (if bump-map bump-map norm-map)
-                 :tex (gl-planet-texture gl-planet)))
+                 :light-intensity #.(v4:*s (v! 1 1 1 0) 1.5)
+                 :ambient-intensity #.(v! 0.2 0.2 0.2 1.0)
+                 :norm-map nil
+                 :tex clouds-texture))
         (map-g #'draw-sphere (gl-planet-stream gl-planet)
-               :model->clip (model->clip box *camera*)
-               :radius (gl-planet-radius gl-planet)
+               :model->clip (model->clip obj *camera*)
+               :radius radius
                :fac 1
-               :tex (gl-planet-texture gl-planet)))))
+               :tex clouds-texture))))
+
+(defun render-planet (gl-planet factor)
+  (when (gl-planet-clouds-texture gl-planet)
+    (setf (near *camera*) 100.0))
+  (if *lighting-enabled*
+      (let* ((norm-map (gl-planet-normal-texture gl-planet))
+             (bump-map (gl-planet-bump-texture gl-planet))
+             (to-model-space-transformation (cam-light-model->world factor gl-planet))
+             (cam-light-vec (m4:*v to-model-space-transformation
+                                   (v! (pos *light*) 1.0))))
+        (map-g (cond
+                 ((and *normal-mapping-enabled* norm-map)
+                  #'frag-point-light)
+                 ((and *normal-mapping-enabled* bump-map)
+                  #'frag-point-light-bump)
+                 (t
+                  #'frag-point-light-nonm))
+               (gl-planet-stream gl-planet)
+               :model->clip (model->clip gl-planet *camera*)
+               :radius (gl-planet-radius gl-planet)
+               :model-space-light-pos (v:s~ cam-light-vec :xyz)
+               :light-intensity #.(v4:*s (v! 1 1 1 0) 1.5)
+               :ambient-intensity #.(v! 0.2 0.2 0.2 1.0)
+               :norm-map (if bump-map bump-map norm-map)
+               :tex (gl-planet-texture gl-planet)))
+      (map-g #'draw-sphere (gl-planet-stream gl-planet)
+             :model->clip (model->clip gl-planet *camera*)
+             :radius (gl-planet-radius gl-planet)
+             :fac 1
+             :tex (gl-planet-texture gl-planet)))
+  (when (gl-planet-clouds-texture gl-planet)
+    (render-clouds gl-planet factor)
+    (setf (near *camera*) 1.0)))
 
 (defun calc-glyph-x-size (c glyph-size)
   (let ((x-size (car glyph-size)))
@@ -660,8 +706,8 @@
         (with-blending *blending-params*
           (let* ((pos-x (start-x))
                  (pos-y y)
-                 (box (when *funky* (make-box :pos (v! (v:x (pos *camera*)) (v:y (pos *camera*)) (- (v:z (pos *camera*)) 1)))))
-                 (model->clip (when *funky* (model->clip box *camera*))))
+                 (pos-vec (when *funky* (v! (v:x (pos *camera*)) (v:y (pos *camera*)) (- (v:z (pos *camera*)) 1))))
+                 (model->clip (when *funky* (pos->clip pos-vec *camera*))))
             (loop for c across text-string
                do
                  (let* ((glyph-texture (get-glyph c))
@@ -699,8 +745,8 @@
   (with-blending *blending-params*
     (let* ((pos-x x)
            (pos-y y)
-           (box (when funky (make-box :pos (v! (v:x (pos *camera*)) (v:y (pos *camera*)) (- (v:z (pos *camera*)) 1)))))
-           (model->clip (when funky (model->clip box *camera*))))
+           (pos-vec (when funky (v! (v:x (pos *camera*)) (v:y (pos *camera*)) (- (v:z (pos *camera*)) 1))))
+           (model->clip (when funky (pos->clip pos-vec *camera*))))
       (loop for c across text-string
          do
            (let* ((glyph-texture (get-glyph c))
@@ -793,10 +839,9 @@
 
 (defun render-rings (gl-planet factor)
   (declare (ignore factor))
-  (let* ((box (gl-planet-box gl-planet))
-         (cam-light-vec (v3:- (box-pos box) (pos *light*))))
+  (let ((cam-light-vec (v3:- (pos gl-planet) (pos *light*))))
     (map-g #'draw-rings *rings-stream*
-           :model->clip (m4:* (model->clip-norot box *camera*)
+           :model->clip (m4:* (model->clip-norot gl-planet *camera*)
                               #.(q:to-mat4 (q:from-axis-angle (v! 0 0 1) (coerce (/ pi 1) 'single-float))))
            :model-space-light-pos (v:s~ cam-light-vec :xyz)
            :radius (* 1.3 (gl-planet-radius gl-planet))
@@ -806,7 +851,7 @@
     (setq cam-light-vec (v! (* -1.0 (v:x cam-light-vec)) (* 1.0 (v:y cam-light-vec)) (* -1.0 (v:z cam-light-vec))))
 
     (map-g #'draw-rings *rings-stream*
-           :model->clip (m4:* (model->clip-norot box *camera*)
+           :model->clip (m4:* (model->clip-norot gl-planet *camera*)
                               #.(q:to-mat4 (q:from-axis-angle (v! -1 0 0) (coerce (/ pi 1) 'single-float))))
            :model-space-light-pos (v:s~ cam-light-vec :xyz)
            :radius (* 1.3 (gl-planet-radius gl-planet))
@@ -968,23 +1013,21 @@
 
   (with-blending *blending-params*
     (dolist (gl-planet *gl-planets*)
-      (let ((box (gl-planet-box gl-planet)))
-        (setf (box-rot box)
-              (q:* (q:from-axis-angle (v! 0 0 1) (* (gl-planet-day gl-planet) *rotation-factor*
-                                                    (/ *time-acceleration* (* 24 60 60))))
-                   ;; align with the texture
-                   #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float))))
-        (if *cull-test-fov-cos*
-            (let ((dot (v3:dot (v3:normalize (v3:- (box-pos box) (pos *camera*))) (dir *camera*))))
-              (when (>= dot *cull-test-fov-cos*)
-                (render-planet gl-planet *rotation-factor*)))
-            (render-planet gl-planet *rotation-factor*))))
+      (setf (rot gl-planet)
+            (q:* (q:from-axis-angle (v! 0 0 1) (* (gl-planet-day gl-planet) *rotation-factor*
+                                                  (/ *time-acceleration* (* 24 60 60))))
+                 ;; align with the texture
+                 #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float))))
+      (if *cull-test-fov-cos*
+          (let ((dot (v3:dot (v3:normalize (v3:- (pos gl-planet) (pos *camera*))) (dir *camera*))))
+            (when (>= dot *cull-test-fov-cos*)
+              (render-planet gl-planet *rotation-factor*)))
+          (render-planet gl-planet *rotation-factor*)))
     (when *gl-saturn*
       (if *cull-test-fov-cos*
-          (let ((box (gl-planet-box *gl-saturn*)))
-            (let ((dot (v3:dot (v3:normalize (v3:- (box-pos box) (pos *camera*))) (dir *camera*))))
-              (when (>= dot *cull-test-fov-cos*)
-                (render-rings *gl-saturn* *rotation-factor*))))
+          (let ((dot (v3:dot (v3:normalize (v3:- (pos *gl-saturn*) (pos *camera*))) (dir *camera*))))
+            (when (>= dot *cull-test-fov-cos*)
+              (render-rings *gl-saturn* *rotation-factor*)))
           (render-rings *gl-saturn* *rotation-factor*))))
 
   (if *use-rtt*
@@ -1155,7 +1198,7 @@
   (let ((earth (find-gl-planet "Earth")))
     (when earth
       (setf (dir *camera*) (v3:normalize
-                            (v3:- (box-pos (gl-planet-box earth))
+                            (v3:- (pos earth)
                                   (pos *camera*))))))
   (camera-change "CAM 2"))
 
@@ -1313,7 +1356,7 @@
         (when *gl-pluto*
           (setq *gl-pluto* (add-gl-planet :name (gl-planet-name *gl-pluto*)
                                           :radius 0.18
-                                          :pos (box-pos (gl-planet-box *gl-pluto*))
+                                          :pos (pos *gl-pluto*)
                                           :texture "plu0rss1.jpg"
                                           :day (gl-planet-day *gl-pluto*))))
         (when following
@@ -1369,7 +1412,8 @@
         (setq *use-rtt* (not *use-rtt*)))
       (when (skitter:key-down-p key.m)
         (setq *normal-mapping-enabled* (not *normal-mapping-enabled*)))
-      (when (skitter:key-down-p key.t)
+      #+nil
+      (when (skitter:key-down-p key.n)
         (setq *tangent-function* (not *tangent-function*))))
 
     (when (skitter:key-down-p key.q)
@@ -1556,11 +1600,11 @@
       (camera-follow *following*))
     (update-positions)
     (update-console)
-    (when (and *gl-pluto* (> (v3:length (box-pos (gl-planet-box *gl-pluto*))) 800))
+    (when (and *gl-pluto* (> (v3:length (pos *gl-pluto*)) 800))
       ;; too far away
       (when *vessel*
         (setf (slot-value *vessel* 'pos) (slot-value *sun* 'pos)))
-      (setf (box-pos (gl-planet-box *gl-pluto*)) (v! 0 0 0))
+      (setf (pos *gl-pluto*) (v! 0 0 0))
       (setq *colliding* *sun*
             *hit-sun* t))
     (when *colliding*
@@ -1598,7 +1642,8 @@
 (let ((running t))
   (defun run-loop ()
     (setq *camera* (make-camera))
-    (setq *cull-test-fov-cos* (cos (* 1.2 (fov *camera*))))
+    (setq *camera* (make-camera))
+    (setq *cull-test-fov-cos* nil #+nil (cos (* 1.2 (fov *camera*))))
     (when *use-rtt*
       (init-render-to-texture))
     (init-sphere)

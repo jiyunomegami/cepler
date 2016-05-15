@@ -238,9 +238,9 @@
             (z (* (v:z pos) *gl-scale*)))
         (let ((glp (find-gl-planet (slot-value obj 'name))))
           (when glp
-            (setf (v:x (box-pos (gl-planet-box glp))) x
-                  (v:y (box-pos (gl-planet-box glp))) y
-                  (v:z (box-pos (gl-planet-box glp))) z)))))))
+            (setf (v:x (pos glp)) x
+                  (v:y (pos glp)) y
+                  (v:z (pos glp)) z)))))))
 
 (defun print-positions ()
   (dolist (obj (cdr *all-objs*))
@@ -249,9 +249,9 @@
             (y (* (v:y pos) *gl-scale*))
             (z (* (v:z pos) *gl-scale*)))
         (let ((glp (find-gl-planet (slot-value obj 'name))))
-          (setf (v:x (box-pos (gl-planet-box glp))) x
-                (v:y (box-pos (gl-planet-box glp))) y
-                (v:z (box-pos (gl-planet-box glp))) z))
+          (setf (v:x (pos glp)) x
+                (v:y (pos glp)) y
+                (v:z (pos glp)) z))
         (format t "~A: ~f  ~f  ~f~%"
                 (slot-value obj 'name)
                 x y z)))))

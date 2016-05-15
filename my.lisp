@@ -53,6 +53,7 @@
   (push #p"~/lgj/cffi/" asdf:*central-registry*)
   (push #p"~/lgj/cl-openal/" asdf:*central-registry*)
   (push #p"~/lgj/bordeaux-threads/" asdf:*central-registry*)
+  (push #p"~/lgj/classimp/" asdf:*central-registry*)
   ;; (asdf:operate 'asdf:load-op :cffi)
   ;; (asdf:operate 'asdf:load-op :cl-opengl)
   ;; (asdf:operate 'asdf:load-op :cepl)
