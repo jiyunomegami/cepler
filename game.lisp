@@ -606,9 +606,8 @@
 
 (defun render-planet (gl-planet factor)
   (when (gl-planet-clouds-texture gl-planet)
-    (gl:disable :depth-test)
-    (gl:enable :cull-face)
-    #+nil
+    ;;(gl:disable :depth-test)
+    ;;(gl:enable :cull-face)
     (setf (near *camera*) 100.0))
   (if *lighting-enabled*
       (let* ((norm-map (gl-planet-normal-texture gl-planet))
@@ -638,8 +637,7 @@
              :tex (gl-planet-texture gl-planet)))
   (when (gl-planet-clouds-texture gl-planet)
     (render-clouds gl-planet factor)
-    (gl:enable :depth-test)
-    #+nil
+    ;;(gl:enable :depth-test)
     (setf (near *camera*) 1.0)))
 
 (defun calc-glyph-x-size (c glyph-size)
