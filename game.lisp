@@ -86,6 +86,9 @@
    (texture :initform nil
             :initarg :texture
             :accessor gl-planet-texture)
+   (night-texture :initform nil
+                  :initarg :night-texture
+                  :accessor gl-planet-night-texture)
    (normal-texture :initform nil
                    :initarg :normal-texture
                    :accessor gl-planet-normal-texture)
@@ -198,7 +201,8 @@
    "e-8192.jpg"
    nil
    "eb-8192.jpg"
-   "clouds.png")
+   "clouds.png"
+   "e-night.jpg")
   ;; http://planetpixelemporium.com/mars.html
   (list "mars_1k_color.jpg"
         "mars_1k_normal.jpg")
@@ -229,10 +233,12 @@
                               (list entry)))))))
         (when tuple
           (let ((texture (car tuple))
+                (night-texture (fifth tuple))
                 (normal-map (cadr tuple))
                 (bump-map (caddr tuple))
                 (clouds-map (fourth tuple)))
             (setf (gl-planet-texture gl-planet) (sample (load-planet-texture texture dir))
+                  (gl-planet-night-texture gl-planet) (when night-texture (sample (load-planet-texture night-texture dir)))
                   (gl-planet-normal-texture gl-planet) (when normal-map (sample (load-planet-texture normal-map dir)))
                   (gl-planet-bump-texture gl-planet) (when bump-map (sample (load-planet-texture bump-map dir)))
                   (gl-planet-clouds-texture gl-planet) (when clouds-map (sample (load-planet-texture clouds-map dir))))))))))
@@ -461,6 +467,8 @@
                     (light-intensity :vec4)
                     (ambient-intensity :vec4)
                     (tex :sampler-2d)
+                    (night-tex :sampler-2d)
+                    (clouds-tex :sampler-2d)
                     (norm-map :sampler-2d))
   (let* ((light-dir
           (normalize (- model-space-pos
@@ -484,6 +492,8 @@
                   (light-intensity :vec4)
                   (ambient-intensity :vec4)
                   (tex :sampler-2d)
+                  (night-tex :sampler-2d)
+                  (clouds-tex :sampler-2d)
                   (norm-map :sampler-2d))
   (let* ((%tex-coord (v! (/ (+ 3.1415927 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.1415927))
                          (v:y tex-coord)))
@@ -506,8 +516,8 @@
                  0.0 1.0))
          (t-col (texture tex %tex-coord)))
     (+ (* t-col light-intensity cos-ang-incidence)
-           (* t-col ambient-intensity dummy-cos-ang-incidence 0.1)
-           (* t-col ambient-intensity))))
+       (* t-col ambient-intensity dummy-cos-ang-incidence 0.1)
+       (* t-col ambient-intensity))))
 
 (defun-g bump-frag ((model-space-pos :vec3)
                     (vertex-normal :vec3)
@@ -519,48 +529,144 @@
                     (light-intensity :vec4)
                     (ambient-intensity :vec4)
                     (tex :sampler-2d)
+                    (night-tex :sampler-2d)
+                    (clouds-tex :sampler-2d)
                     (norm-map :sampler-2d))
-  (let* ((tex-size (texture-size tex 0))
-         (bump-dimensions (texture-size norm-map 0))
+  (let* ((bump-dimensions (texture-size norm-map 0))
          (%tex-coord (v! (/ (+ 3.1415927 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.1415927))
                          (v:y tex-coord)))
          (temp (- model-space-pos
                   model-space-light-pos))
-         (light-dir
-          (normalize temp))
-         (dir2 (* light-dir -1.0))
+         (light-dir (normalize temp))
          (normal (normalize vertex-normal))
-         (tangent (normalize (cross normal dir2)))
+         (tangent (normalize (cross normal light-dir)))
          (binormal (normalize (cross normal tangent)))
          (bumpmap-strength (* 20.0 (/ (v:x bump-dimensions) 8192.0)))
          (bm0 (v:x (texture norm-map %tex-coord)))
          (bmup (v:x (texture norm-map (+ %tex-coord (v! 0 (/ 1.0 (v:y bump-dimensions)))))))
          (bmright (v:x (texture norm-map (+ %tex-coord (v! (/ 1.0 (v:x bump-dimensions)) 0)))))
-         (bump-vector (+ (* (- bmright bm0) binormal)
-                         (* (- bmup bm0) tangent)))
+         (bump-vector (* 1 (+ (* (- bmright bm0) binormal)
+                              (* (- bmup bm0) tangent))))
          (bumped-normal (normalize (+ normal (* bumpmap-strength bump-vector))))
          (dummy-light-dir (* binormal -1.0))
          (dummy-cos-ang-incidence
           (clamp (dot bumped-normal dummy-light-dir)
                  0.0 1.0))
+         (cos (dot bumped-normal light-dir))
          (cos-ang-incidence
-          (clamp (dot bumped-normal light-dir)
+          (clamp cos
                  0.0 1.0))
-         (t-col (texture tex %tex-coord)))
-    (+ (* t-col light-intensity cos-ang-incidence)
-       (* t-col ambient-intensity dummy-cos-ang-incidence)
-       (* t-col ambient-intensity))))
+         (c-tc (v! (/ (+ 3.1415927 (atan (+ (* 0.013 (v:x light-dir)) (v:x model-space-pos))
+                                         (+ (* 0.013 (v:z light-dir)) (v:z model-space-pos)))) (* 2 3.1415927))
+                   (v:y tex-coord)))
+         (c-col (texture clouds-tex c-tc))
+         (t-col (texture tex %tex-coord))
+         (n-t-col (texture night-tex %tex-coord))
+         (angle (acos cos))
+         (steepness 15)
+         (lighted
+          (* 0.5 (- (tanh (* steepness (+ angle (/ 3.1415927 2)))) (tanh (* steepness (- angle (/ 3.1415927 2))))))
+           #+nil
+           (* 0.5 (+ 1 (cos (/ (* angle angle) (* 1 3.1415927))))))
+         (unlighted
+          (- 1 lighted))
+         (i (* 8
+               (v:x n-t-col)
+               (v:y n-t-col)
+               (v:z n-t-col)))
+         (w (v:w n-t-col))
+         (col (+ (* t-col (max 0.5 lighted))
+                 (* (v! i i i w)
+                    unlighted))))
+    (+ (* col light-intensity cos-ang-incidence)
+       (* col ambient-intensity dummy-cos-ang-incidence)
+       (* col ambient-intensity))))
+
+(defun-g clouds-bump-frag ((model-space-pos :vec3)
+                           (vertex-normal :vec3)
+                           (diffuse-color :vec4)
+                           (tex-coord :vec2)
+                           &uniform
+                           (model->clip :mat4)
+                           (model-space-light-pos :vec3)
+                           (light-intensity :vec4)
+                           (ambient-intensity :vec4)
+                           (tex :sampler-2d)
+                           (night-tex :sampler-2d)
+                           (clouds-tex :sampler-2d)
+                           (norm-map :sampler-2d))
+  (let* ((bump-dimensions (texture-size norm-map 0))
+         (%tex-coord (v! (/ (+ 3.1415927 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.1415927))
+                         (v:y tex-coord)))
+         (temp (- model-space-pos
+                  model-space-light-pos))
+         (light-dir (normalize temp))
+         (normal (normalize vertex-normal))
+         (tangent (normalize (cross normal light-dir)))
+         (binormal (normalize (cross normal tangent)))
+         (bumpmap-strength (* 20.0 (/ (v:x bump-dimensions) 8192.0)))
+         (bm0 (v:x (texture norm-map %tex-coord)))
+         (bmup (v:x (texture norm-map (+ %tex-coord (v! 0 (/ 1.0 (v:y bump-dimensions)))))))
+         (bmright (v:x (texture norm-map (+ %tex-coord (v! (/ 1.0 (v:x bump-dimensions)) 0)))))
+         (bump-vector (* 1 (+ (* (- bmright bm0) binormal)
+                              (* (- bmup bm0) tangent))))
+         (bumped-normal (normalize (+ normal (* bumpmap-strength bump-vector))))
+         (dummy-light-dir (* binormal -1.0))
+         (dummy-cos-ang-incidence
+          (clamp (dot bumped-normal dummy-light-dir)
+                 0.0 1.0))
+         (cos (dot bumped-normal light-dir))
+         (cos-ang-incidence
+          (clamp cos
+                 0.0 1.0))
+         (c-tc (v! (/ (+ 3.1415927 (atan (+ (* 0.013 (v:x light-dir)) (v:x model-space-pos))
+                                         (+ (* 0.013 (v:z light-dir)) (v:z model-space-pos)))) (* 2 3.1415927))
+                   (v:y tex-coord)))
+         (c-col (texture clouds-tex c-tc))
+         (t-col (texture tex %tex-coord))
+         (n-t-col (texture night-tex %tex-coord))
+         (angle (acos cos))
+         (steepness 15)
+         (lighted
+          (* 0.5 (- (tanh (* steepness (+ angle (/ 3.1415927 2)))) (tanh (* steepness (- angle (/ 3.1415927 2))))))
+           #+nil
+           (* 0.5 (+ 1 (cos (/ (* angle angle) (* 1 3.1415927))))))
+         (unlighted
+          (- 1 lighted))
+         (i (* 7
+               (v:x n-t-col)
+               (v:y n-t-col)
+               (v:z n-t-col)))
+         (w (v:w n-t-col))
+         (col (+ (* t-col (max 0.4 lighted))
+                 (* (+ (v! i i i w)
+                       n-t-col)
+                    unlighted))))
+    ;; cloud shadows
+    (cond
+      ((> (v:w c-col) 0.0)
+       (let ((w (- 1 (v:w c-col))))
+         (setf col (v! (* (v:x col) w)
+                       (* (v:y col) w)
+                       (* (v:z col) w)
+                       (v:w col)))))
+      (t
+       (setf col col)))
+    (+ (* col light-intensity cos-ang-incidence)
+       (* col ambient-intensity dummy-cos-ang-incidence)
+       (* col ambient-intensity))))
 
 (def-g-> frag-point-light () #'nm-vert #'nm-frag)
 (def-g-> frag-point-light-bump () #'nm-vert #'bump-frag)
 (def-g-> frag-point-light-nonm () #'nm-vert #'nonm-frag)
+(def-g-> frag-point-light-clouds-bump () #'nm-vert #'clouds-bump-frag)
 
 (defvar *normal-mapping-enabled* t)
 
 (defun render-clouds (gl-planet factor)
   (let* ((clouds-texture (gl-planet-clouds-texture gl-planet))
-         (speed 2.5)
-         (radius (* (+ 1.0 (* *gl-scale* 7000.0 1000 2))
+         (speed 1)
+         (radius (* (+ 1.0 (* *gl-scale* 7000.0 1000 2.3))
                     (gl-planet-radius gl-planet)))
          (obj (make-instance 'gl-object
                              :pos (pos gl-planet)
@@ -595,8 +701,9 @@
                  :radius radius
                  :model-space-light-pos (v:s~ cam-light-vec :xyz)
                  :light-intensity #.(v4:*s (v! 1 1 1 0) 1.5)
-                 :ambient-intensity #.(v! 0.2 0.2 0.2 1.0)
+                 :ambient-intensity #.(v! 0.1 0.1 0.1 1.0)
                  :norm-map nil
+                 :night-tex nil
                  :tex clouds-texture))
         (map-g #'draw-sphere (gl-planet-stream gl-planet)
                :model->clip (model->clip obj *camera*)
@@ -605,19 +712,23 @@
                :tex clouds-texture))))
 
 (defun render-planet (gl-planet factor)
+  #+nil
   (when (gl-planet-clouds-texture gl-planet)
     ;;(gl:disable :depth-test)
     ;;(gl:enable :cull-face)
-    (setf (near *camera*) 100.0))
+    (setf (near *camera*) 1.0))
   (if *lighting-enabled*
       (let* ((norm-map (gl-planet-normal-texture gl-planet))
              (bump-map (gl-planet-bump-texture gl-planet))
+             (clouds-map (gl-planet-clouds-texture gl-planet))
              (to-model-space-transformation (cam-light-model->world factor gl-planet))
              (cam-light-vec (m4:*v to-model-space-transformation
                                    (v! (pos *light*) 1.0))))
         (map-g (cond
                  ((and *normal-mapping-enabled* norm-map)
                   #'frag-point-light)
+                 ((and *normal-mapping-enabled* bump-map clouds-map)
+                  #'frag-point-light-clouds-bump)
                  ((and *normal-mapping-enabled* bump-map)
                   #'frag-point-light-bump)
                  (t
@@ -627,8 +738,10 @@
                :radius (gl-planet-radius gl-planet)
                :model-space-light-pos (v:s~ cam-light-vec :xyz)
                :light-intensity #.(v4:*s (v! 1 1 1 0) 1.5)
-               :ambient-intensity #.(v! 0.2 0.2 0.2 1.0)
+               :ambient-intensity #.(v! 0.1 0.1 0.1 1.0)
                :norm-map (if bump-map bump-map norm-map)
+               :night-tex (gl-planet-night-texture gl-planet)
+               :clouds-tex (gl-planet-clouds-texture gl-planet)
                :tex (gl-planet-texture gl-planet)))
       (map-g #'draw-sphere (gl-planet-stream gl-planet)
              :model->clip (model->clip gl-planet *camera*)
@@ -638,6 +751,7 @@
   (when (gl-planet-clouds-texture gl-planet)
     (render-clouds gl-planet factor)
     ;;(gl:enable :depth-test)
+    #+nil
     (setf (near *camera*) 1.0)))
 
 (defun calc-glyph-x-size (c glyph-size)
