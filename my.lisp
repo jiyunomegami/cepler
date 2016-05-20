@@ -66,6 +66,9 @@
   )
 
 (defun load-game ()
+  (if *quicklisp-only*
+      (ql:quickload "cl-freetype2")
+      (asdf:operate 'asdf:load-op :cl-freetype2))
   (unless (directory "./vsop87/")
     (format *query-io* "WARNING: vsop87 not available. Initial conditions will be incorrect. Press enter to continue.~%")
     (force-output *query-io*)

@@ -21,10 +21,17 @@
                #:cl-alut
                #:temporal-functions)
   :components ((:file "package")
-               ;;(:file "ft")
+
                (:file "camera" :depends-on ("package"))
+               (:file "sky" :depends-on ("package"))
+
                (:file "vsop87")
                (:file "planets" :depends-on ("vsop87" "camera"))
-               (:file "sky" :depends-on ("package"))
+
+               (:file "ft")
+               (:file "console" :depends-on ("ft" "planets"))
+
+               (:file "textures" :depends-on ("package"))
+               (:file "fps" :depends-on ("package"))
                (:file "sound" :depends-on ("package"))
-               (:file "game" :depends-on ("camera" "planets" "sky" "sound"))))
+               (:file "game" :depends-on ("fps" "sky" "textures" "sound" "console"))))

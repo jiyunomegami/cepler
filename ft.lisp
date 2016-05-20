@@ -1,10 +1,4 @@
-(if *quicklisp-only*
-    (ql:quickload "cl-freetype2")
-    (asdf:operate 'asdf:load-op :cl-freetype2))
-
 (in-package :cepler)
-
-(setq *loaded-ft* t)
 
 (defvar *face* nil)
 (defvar *glyphs* (make-hash-table :test #'equal))

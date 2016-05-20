@@ -222,7 +222,7 @@
 
 (defvar *state-output-stream* t)
 
-(defparameter *gl-scale* 0.0000000001)
+(defparameter *gl-scale* (* 0.0000000001 1000))
 (defvar *gl-planets*)
 
 (defun find-gl-planet (name)
@@ -695,7 +695,7 @@
                                        :fuel 1
                                        :radius radius
                                        )))
-        (setq *gl-pluto* (add-gl-planet :name name :radius (* 1520 *gl-scale* radius) :pos (v! 0 0 0) :texture "plu0rss1.jpg" :day (/ 24 -153.3)))
+        (setq *gl-pluto* (add-gl-planet :name name :radius (* 1.52 *gl-scale* radius) :pos (v! 0 0 0) :texture "plu0rss1.jpg" :day (/ 24 -153.3)))
         (setq *vessel* new-pluto)
         (setq *cheated* nil)
         ;;(describe new-pluto)
