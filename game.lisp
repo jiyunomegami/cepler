@@ -40,6 +40,9 @@
    (day :initform 1
         :initarg :day
         :accessor gl-planet-day)
+   (obliquity :initform 0.0
+              :initarg :obliquity
+              :accessor gl-planet-obliquity)
    (data :initform nil
          :initarg :data
          :accessor :gl-planet-day)
@@ -76,6 +79,7 @@
 (defun add-gl-planet (&key
                         (name "")
                         (day 1)
+                        (obliquity #.(radians 23.4))
                         (radius 0.5)
                         pos
                         (texture "ear.jpg"))
@@ -87,6 +91,7 @@
                         :name name
                         :radius (* 1000.0 radius) ;;XXX fix cloud clipping issue by making everything bigger
                         :day day
+                        :obliquity obliquity
                         :pos pos
                         :data *sphere-data*
                         :index *sphere-index*
@@ -125,17 +130,16 @@
 (defun init-gl-planets ()
   (setq *gl-planets* nil)
   (add-gl-planet :name "Sun"     :radius  5.00   :pos (v!   0.0000 0 0)   :texture "sun.jpg"       :day 0)
-  ;;(add-gl-planet :name "Mercury" :radius  0.38   :pos (v!   5.7910 0 0)   :texture "mer0muu2.jpg"       :day (/ 24 1407.6))
-  (add-gl-planet :name "Mercury" :radius  0.38   :pos (v!   5.7910 0 0)   :texture "mercury.jpg"       :day (/ 24 1407.6))
-  (add-gl-planet :name "Venus"   :radius  0.95   :pos (v!  10.8200 0 0)   :texture "ven0mss2.jpg"       :day (/ 24 -5832.5))
-  (add-gl-planet :name "Earth"   :radius  1.00   :pos (v!  14.9600 0 0)   :texture "ear0xuu2.jpg"       :day (/ 24 23.9))
-  (add-gl-planet :name "Mars"    :radius  0.53   :pos (v!  22.7900 0 0)   :texture "mar0kuu2.jpg"       :day (/ 24 24.6))
-  (add-gl-planet :name "Jupiter" :radius 11.19   :pos (v!  77.8330 0 0)   :texture "jup0vss1.jpg"       :day (/ 24 9.9))
-  (add-gl-planet :name "Saturn"  :radius  9.40   :pos (v! 142.9400 0 0)   :texture "sat0fds1.jpg"       :day (/ 24 10.7))
-  (add-gl-planet :name "Uranus"  :radius  4.04   :pos (v! 287.0990 0 0)   :texture "ura0fss1.jpg"       :day (/ 24 -17.2))
-  (add-gl-planet :name "Neptune" :radius  3.88   :pos (v! 450.4300 0 0)   :texture "nep0fds1.jpg"       :day (/ 24 16.1))
+  (add-gl-planet :name "Mercury" :radius  0.38   :pos (v!   5.7910 0 0)   :texture "mercury.jpg"   :day (/ 24 1407.6)   :obliquity (radians 0.01))
+  (add-gl-planet :name "Venus"   :radius  0.95   :pos (v!  10.8200 0 0)   :texture "ven0mss2.jpg"  :day (/ 24 -5832.5)  :obliquity (radians 177.4))
+  (add-gl-planet :name "Earth"   :radius  1.00   :pos (v!  14.9600 0 0)   :texture "ear0xuu2.jpg"  :day (/ 24 23.9)     :obliquity (radians 23.4))
+  (add-gl-planet :name "Mars"    :radius  0.53   :pos (v!  22.7900 0 0)   :texture "mar0kuu2.jpg"  :day (/ 24 24.6)     :obliquity (radians 25.2))
+  (add-gl-planet :name "Jupiter" :radius 11.19   :pos (v!  77.8330 0 0)   :texture "jup0vss1.jpg"  :day (/ 24 9.9)      :obliquity (radians 3.1))
+  (add-gl-planet :name "Saturn"  :radius  9.40   :pos (v! 142.9400 0 0)   :texture "sat0fds1.jpg"  :day (/ 24 10.7)     :obliquity (radians 26.7))
+  (add-gl-planet :name "Uranus"  :radius  4.04   :pos (v! 287.0990 0 0)   :texture "ura0fss1.jpg"  :day (/ 24 -17.2)    :obliquity (radians 97.8))
+  (add-gl-planet :name "Neptune" :radius  3.88   :pos (v! 450.4300 0 0)   :texture "nep0fds1.jpg"  :day (/ 24 16.1)     :obliquity (radians 28.3))
   #+nil
-  (add-gl-planet :name "Pluto"   :radius  0.18   :pos (v! 591.3520 0 0)   :texture "plu0rss1.jpg"       :day (/ 24 -153.3))
+  (add-gl-planet :name "Pluto"   :radius  0.18   :pos (v! 591.3520 0 0)   :texture "plu0rss1.jpg"  :day (/ 24 -153.3))
   (init-rings)
   (load-texture-set *texture-set*))
 
@@ -183,11 +187,12 @@
 
 (defun cam-light-model->world (factor gl-planet)
   (let ((pos (pos gl-planet)))
-    (m4:* (m4:* (q:to-mat4 (q:*
-                            #.(q:from-axis-angle (v! -1 0 0) (coerce (/ pi 2) 'single-float))
-                            (q:from-axis-angle (v! 0 0 -1) (* (gl-planet-day gl-planet)
-                                                              (/ *time-acceleration* (* 24 60 60))
-                                                              factor))))
+    (m4:* (m4:* (q:to-mat4 (q:* (q:*
+                                 #.(q:from-axis-angle (v! -1 0 0) (coerce (/ pi 2) 'single-float))
+                                 (q:from-axis-angle (v! 0 0 -1) (* (gl-planet-day gl-planet)
+                                                                   (/ *time-acceleration* (* 24 60 60))
+                                                                   factor)))
+                                (q:from-axis-angle (v! 1 0 0) (gl-planet-obliquity gl-planet))))
                 (m4:translation pos))
           (q:to-mat4 (rot gl-planet)))))
 
@@ -454,19 +459,21 @@
                              :pos (pos gl-planet)
                              :rot (rot gl-planet))))
     (setq factor (* speed factor))
-    (setf (rot obj) (q:* (q:from-axis-angle #.(v! 0 0 1) (* (gl-planet-day gl-planet) factor
-                                                            (/ *time-acceleration* (* 24 60 60))))
-                         ;; align with the texture
-                         #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float))))
+    (setf (rot obj) (q:* (q:from-axis-angle (v! -1 0 0) (gl-planet-obliquity gl-planet))
+                         (q:* (q:from-axis-angle #.(v! 0 0 1) (* (gl-planet-day gl-planet) factor
+                                                                 (/ *time-acceleration* (* 24 60 60))))
+                              ;; align with the texture
+                              #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float)))))
     (if *lighting-enabled*
         (let* ((norm-map nil)
                (bump-map nil)
                (to-model-space-transformation
-                (m4:* (m4:* (q:to-mat4 (q:*
-                                        #.(q:from-axis-angle (v! -1 0 0) (coerce (/ pi 2) 'single-float))
-                                        (q:from-axis-angle #.(v! 0 0 -1) (* (gl-planet-day gl-planet)
-                                                                            (/ *time-acceleration* (* 24 60 60))
-                                                                            factor))))
+                (m4:* (m4:* (q:to-mat4 (q:* (q:*
+                                             #.(q:from-axis-angle (v! -1 0 0) (coerce (/ pi 2) 'single-float))
+                                             (q:from-axis-angle #.(v! 0 0 -1) (* (gl-planet-day gl-planet)
+                                                                                 (/ *time-acceleration* (* 24 60 60))
+                                                                                 factor)))
+                                            (q:from-axis-angle (v! 1 0 0) (gl-planet-obliquity gl-planet))))
                             (m4:translation (pos obj)))
                       (q:to-mat4 (rot obj))))
                (cam-light-vec (m4:*v to-model-space-transformation
@@ -589,8 +596,9 @@
   (declare (ignore factor))
   (let ((cam-light-vec (v3:- (pos gl-planet) (pos *light*))))
     (map-g #'draw-rings *rings-stream*
-           :model->clip (m4:* (model->clip-norot gl-planet *camera*)
-                              #.(q:to-mat4 (q:from-axis-angle (v! 0 0 1) (coerce (/ pi 1) 'single-float))))
+           :model->clip (m4:* (m4:* (model->clip-norot gl-planet *camera*)
+                                    #.(q:to-mat4 (q:from-axis-angle (v! 0 0 1) (coerce (/ pi 1) 'single-float))))
+                              (q:to-mat4 (q:from-axis-angle (v! 1 0 0) (gl-planet-obliquity gl-planet))))
            :model-space-light-pos (v:s~ cam-light-vec :xyz)
            :radius (* 1.3 (gl-planet-radius gl-planet))
            :fac 1
@@ -599,8 +607,9 @@
     (setq cam-light-vec (v! (* -1.0 (v:x cam-light-vec)) (* 1.0 (v:y cam-light-vec)) (* -1.0 (v:z cam-light-vec))))
 
     (map-g #'draw-rings *rings-stream*
-           :model->clip (m4:* (model->clip-norot gl-planet *camera*)
-                              #.(q:to-mat4 (q:from-axis-angle (v! -1 0 0) (coerce (/ pi 1) 'single-float))))
+           :model->clip (m4:* (m4:* (model->clip-norot gl-planet *camera*)
+                                    #.(q:to-mat4 (q:from-axis-angle (v! -1 0 0) (coerce (/ pi 1) 'single-float))))
+                              (q:to-mat4 (q:from-axis-angle (v! -1 0 0) (gl-planet-obliquity gl-planet))))
            :model-space-light-pos (v:s~ cam-light-vec :xyz)
            :radius (* 1.3 (gl-planet-radius gl-planet))
            :fac 1
@@ -627,10 +636,11 @@
   (with-blending *blending-params*
     (dolist (gl-planet *gl-planets*)
       (setf (rot gl-planet)
-            (q:* (q:from-axis-angle (v! 0 0 1) (* (gl-planet-day gl-planet) *rotation-factor*
-                                                  (/ *time-acceleration* (* 24 60 60))))
-                 ;; align with the texture
-                 #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float))))
+            (q:* (q:from-axis-angle (v! -1 0 0) (gl-planet-obliquity gl-planet))
+                 (q:* (q:from-axis-angle (v! 0 0 1) (* (gl-planet-day gl-planet) *rotation-factor*
+                                                       (/ *time-acceleration* (* 24 60 60))))
+                      ;; align with the texture
+                      #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float)))))
       (if *cull-test-fov-cos*
           (let ((dot (v3:dot (v3:normalize (v3:- (pos gl-planet) (pos *camera*))) (dir *camera*))))
             (when (>= dot *cull-test-fov-cos*)
@@ -974,7 +984,8 @@
                                           :radius 0.18
                                           :pos (pos *gl-pluto*)
                                           :texture "plu0rss1.jpg"
-                                          :day (gl-planet-day *gl-pluto*))))
+                                          :day (gl-planet-day *gl-pluto*)
+                                          :obliquity (gl-planet-obliquity *gl-pluto*))))
         (when following
           (unfollow)
           (follow following))))

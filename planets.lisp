@@ -695,7 +695,7 @@
                                        :fuel 1
                                        :radius radius
                                        )))
-        (setq *gl-pluto* (add-gl-planet :name name :radius (* 1.52 *gl-scale* radius) :pos (v! 0 0 0) :texture "plu0rss1.jpg" :day (/ 24 -153.3)))
+        (setq *gl-pluto* (add-gl-planet :name name :radius (* 1.52 *gl-scale* radius) :pos (v! 0 0 0) :texture "plu0rss1.jpg" :day (/ 24 -153.3) :obliquity (radians 122.5)))
         (setq *vessel* new-pluto)
         (setq *cheated* nil)
         ;;(describe new-pluto)
