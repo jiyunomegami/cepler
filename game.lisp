@@ -258,6 +258,7 @@
                     (tex :sampler-2d)
                     (night-tex :sampler-2d)
                     (clouds-tex :sampler-2d)
+                    (camera-distance :float)
                     (norm-map :sampler-2d))
   (let* ((light-dir
           (normalize (- model-space-pos
@@ -283,6 +284,7 @@
                   (tex :sampler-2d)
                   (night-tex :sampler-2d)
                   (clouds-tex :sampler-2d)
+                  (camera-distance :float)
                   (norm-map :sampler-2d))
   (let* ((%tex-coord (v! (/ (+ 3.1415927 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.1415927))
                          (v:y tex-coord)))
@@ -320,6 +322,7 @@
                     (tex :sampler-2d)
                     (night-tex :sampler-2d)
                     (clouds-tex :sampler-2d)
+                    (camera-distance :float)
                     (norm-map :sampler-2d))
   (let* ((bump-dimensions (texture-size norm-map 0))
          (%tex-coord (v! (/ (+ 3.1415927 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.1415927))
@@ -348,7 +351,6 @@
          (c-tc (v! (/ (+ 3.1415927 (atan (+ (* 0.013 (v:x light-dir)) (v:x model-space-pos))
                                          (+ (* 0.013 (v:z light-dir)) (v:z model-space-pos)))) (* 2 3.1415927))
                    (v:y tex-coord)))
-         (c-col (texture clouds-tex c-tc))
          (t-col (texture tex %tex-coord))
          (n-t-col (texture night-tex %tex-coord))
          (angle (acos cos))
@@ -383,17 +385,22 @@
                            (tex :sampler-2d)
                            (night-tex :sampler-2d)
                            (clouds-tex :sampler-2d)
+                           (camera-distance :float)
                            (norm-map :sampler-2d))
   (let* ((bump-dimensions (texture-size norm-map 0))
-         (%tex-coord (v! (/ (+ 3.1415927 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.1415927))
-                         (v:y tex-coord)))
          (temp (- model-space-pos
                   model-space-light-pos))
          (light-dir (normalize temp))
+         (%tex-coord (v! (/ (+ 3.1415927 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.1415927))
+                         (v:y tex-coord)))
+         (c-tc (v! (/ (+ 3.1415927 (atan (+ (* 0.013 (v:x light-dir)) (v:x model-space-pos))
+                                         (+ (* 0.013 (v:z light-dir)) (v:z model-space-pos)))) (* 2 3.1415927))
+                   (v:y tex-coord)))
+         (c-col (texture clouds-tex c-tc))
          (normal (normalize vertex-normal))
          (tangent (normalize (cross normal light-dir)))
          (binormal (normalize (cross normal tangent)))
-         (bumpmap-strength (* 20.0 (/ (v:x bump-dimensions) 8192.0)))
+         (bumpmap-strength (* (- 1 (v:w c-col)) (- 1 (v:w c-col)) 20.0 (/ (v:x bump-dimensions) 8192.0)))
          (bm0 (v:x (texture norm-map %tex-coord)))
          (bmup (v:x (texture norm-map (+ %tex-coord (v! 0 (/ 1.0 (v:y bump-dimensions)))))))
          (bmright (v:x (texture norm-map (+ %tex-coord (v! (/ 1.0 (v:x bump-dimensions)) 0)))))
@@ -408,10 +415,6 @@
          (cos-ang-incidence
           (clamp cos
                  0.0 1.0))
-         (c-tc (v! (/ (+ 3.1415927 (atan (+ (* 0.013 (v:x light-dir)) (v:x model-space-pos))
-                                         (+ (* 0.013 (v:z light-dir)) (v:z model-space-pos)))) (* 2 3.1415927))
-                   (v:y tex-coord)))
-         (c-col (texture clouds-tex c-tc))
          (t-col (texture tex %tex-coord))
          (n-t-col (texture night-tex %tex-coord))
          (angle (acos cos))
@@ -431,13 +434,26 @@
                  (* (+ (v! i i i w)
                        n-t-col)
                     unlighted))))
-    ;; cloud shadows
     (cond
+      ;; cloud shadows
       ((> (v:w c-col) 0.0)
        (let ((w (- 1 (v:w c-col))))
+         ;;(setf cos-ang-incidence (* cos-ang-incidence w)) 
          (setf col (v! (* (v:x col) w)
                        (* (v:y col) w)
                        (* (v:z col) w)
+                       (v:w col)))))
+      (t
+       (setf col col)))
+    (cond
+      ;; render clouds on one sphere
+      ((> camera-distance 3000.0)
+       (let* ((c-col (texture clouds-tex %tex-coord))
+              (f (- 0.8 (* 0.2 cos-ang-incidence)))
+              (a (clamp (max 0.0 (* f (v:w c-col))) 0.0 1.0)))
+         (setf col (v! (+ (* (v:x col) (- 1 a)) (* (v:x c-col) a))
+                       (+ (* (v:y col) (- 1 a)) (* (v:y c-col) a))
+                       (+ (* (v:z col) (- 1 a)) (* (v:z c-col) a))
                        (v:w col)))))
       (t
        (setf col col)))
@@ -451,9 +467,11 @@
 (def-g-> frag-point-light-clouds-bump () #'nm-vert #'clouds-bump-frag)
 
 (defun render-clouds (gl-planet factor)
+  (when (> (v:length (v:- (pos *camera*) (pos gl-planet))) 3000.0)
+    (return-from render-clouds))
   (let* ((clouds-texture (gl-planet-clouds-texture gl-planet))
          (speed 1)
-         (radius (* (+ 1.0 (* *gl-scale* 7000.0 1000 0.01 1))
+         (radius (* (+ 1.0 (* *gl-scale* 7000.0 1000 0.01))
                     (gl-planet-radius gl-planet)))
          (obj (make-instance 'gl-object
                              :pos (pos gl-planet)
@@ -526,6 +544,7 @@
                :norm-map (if bump-map bump-map norm-map)
                :night-tex (gl-planet-night-texture gl-planet)
                :clouds-tex (gl-planet-clouds-texture gl-planet)
+               :camera-distance (v:length (v:- (pos *camera*) (pos gl-planet)))
                :tex (gl-planet-texture gl-planet)))
       (map-g #'draw-sphere (gl-planet-stream gl-planet)
              :model->clip (model->clip gl-planet *camera*)
