@@ -5,6 +5,7 @@
   (asdf:system-relative-pathname :cepler ""))
 
 (defvar *camera* nil)
+(defvar *skybox-camera* nil)
 (defvar *sky-enabled* nil)
 (defvar *skybox-stream* nil)
 (defvar *sky-cube-texture* nil)
@@ -30,7 +31,7 @@
     (gl:depth-func :lequal)
     (map-g #'draw-sky *skybox-stream*
            :tex *sky-cube-texture*
-           :to-cam-space (m4:* (cam->clip *camera*) (world->cam *camera*)))
+           :to-cam-space (m4:* (cam->clip *skybox-camera*) (world->cam *skybox-camera*)))
     (gl:depth-func :less)))
 
 (defun make-cubemap-tex (&rest paths)
@@ -41,6 +42,7 @@
     (sample (make-texture ca :element-type :rgb8 :cubes t))))
 
 (defun init-sky-data ()
+  (setq *skybox-camera* (make-camera))
   (let* ((bx (dendrite.primitives:cube-data
 	      :size #.(* 1000 10 2010s0) :normals nil :tex-coords nil))
          (data (make-gpu-array (first bx) :element-type :vec3))

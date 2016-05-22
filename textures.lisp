@@ -69,6 +69,10 @@
 
 (deftexset "set3" "set3/"
   ("set2")
+  ;; moon from http://planetpixelemporium.com/earth.html
+  :moon (list "moonmap2k.jpg"
+              nil
+              "moonbump2k.jpg")
   :earth (list
           "e-8192.jpg"
           nil

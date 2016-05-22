@@ -2,6 +2,9 @@
 
 (defvar *blending-params* (make-blending-params))
 
+(defvar *normal-mapping-enabled* t)
+(defvar *lighting-enabled* t)
+
 (defvar *paused* nil)
 (defvar *show-console* nil)
 
@@ -154,9 +157,10 @@
           (case c
             (#\w (glyph-size 0.45))
             (#\W (glyph-size 0.60))
+            (#\M (glyph-size 0.55))
             (#\V (glyph-size 0.38))
             (#\Y (glyph-size 0.40))
-            (#\A (glyph-size 0.40))
+            (#\A (glyph-size 0.42))
             (#\O (glyph-size 0.50))
             (#\y (glyph-size 0.32))
             (#\1 (glyph-size 0.30))
@@ -247,6 +251,20 @@
                                       size)
                             :tex glyph-texture))))))))))
 
+(defmacro drawing-settings (&body body)
+  `(let ((%dsy 0.65)
+         (%dsx -0.92)
+         (%size 0.6))
+     ,@body))
+
+(defmacro draw-setting (var char)
+  (let ((str (princ-to-string char)))
+    `(progn
+       (if ,var
+           (render-text ,str :size %size :y %dsy :x %dsx :color (v! 0 1 0))
+           (render-text ,str :size %size :y %dsy :x %dsx :color (v! 0.6 0.6 0.6)))
+     (incf %dsx (calc-text-width ,str :size %size)))))
+
 (defun render-overlay ()
   (when *use-rtt*
     (gl:bind-framebuffer :framebuffer *rtt-framebuffer*)
@@ -262,6 +280,14 @@
              :tex *console-texture*)))
   (when *console-text*
     (render-text *console-text*)
+    (drawing-settings
+      (draw-setting *use-vsop* "V")
+      (draw-setting *use-elp* "E")
+      (draw-setting *draw-to-scale* "S")
+      (draw-setting *sun-actual-size* "A")
+      (draw-setting *lighting-enabled* "L")
+      (draw-setting *normal-mapping-enabled* "M")
+      (draw-setting *use-rtt* "T"))
     (render-text *camera-text* :x :right)
     (render-text *date-text* :x :center)
     (when *vessel*

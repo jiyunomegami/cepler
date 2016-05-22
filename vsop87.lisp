@@ -46,45 +46,77 @@
 ;;; It relies heavily on the fact that the VSOP87 data files
 ;;; have a well defined structure, laid out in vsop87.doc.
 (defun vsop87-file-reader (filename)
-  (if (not (probe-file filename))
-      (return-from vsop87-file-reader nil))
+  (format t "reading from ~A~%" filename)
+  (when (not (probe-file filename))
+    (format t "  file ~A not found~%" filename)
+    (return-from vsop87-file-reader nil))
   (with-open-file (file filename)        
     (let ((variable-to-series-set-plist ()))
       (loop for line = (read-line file nil) while line do
-            (let
-              ((variable (read-from-string (concatenate 'string ":"
-                                                        (let ((coord-index (read-int-from-string line 41 42)))
-                                                          (subseq (subseq line (position #\( line) (position #\) line)) coord-index (1+ coord-index)))))))
-              (setf (getf variable-to-series-set-plist variable)
-                    (append (getf variable-to-series-set-plist variable)
-                            (list (make-instance 'vsop-series
-                                                 :alpha (read-int-from-string line 59 60)
-                                                 :terms
-                                                 (let (term-line)
-                                                   (loop for i from 1 upto (read-int-from-string line 60 67) collecting
-                                                         (progn
-                                                           (setf term-line (read-line file))
-                                                           (list
-                                                             (read-fixed-point-as-double-from-string term-line  79  97)
-                                                             (read-fixed-point-as-double-from-string term-line  97 111)
-                                                             (read-fixed-point-as-double-from-string term-line 111 131)))))))))))
+           (let ((variable (read-from-string (concatenate 'string ":"
+                                                          (let ((coord-index (read-int-from-string line 41 42)))
+                                                            (subseq (subseq line (position #\( line) (position #\) line)) coord-index (1+ coord-index)))))))
+             ;;(format t "   variable: ~A~%" variable)
+             ;;(format t "   alpha: ~A~%" (read-int-from-string line 59 60))
+             (setf (getf variable-to-series-set-plist variable)
+                   (append (getf variable-to-series-set-plist variable)
+                           (list (make-instance 'vsop-series
+                                                :alpha (read-int-from-string line 59 60)
+                                                :terms
+                                                (let (term-line)
+                                                  (loop for i from 1 upto (read-int-from-string line 60 67) collecting
+                                                       (progn
+                                                         (setf term-line (read-line file))
+                                                         (list
+                                                          (read-fixed-point-as-double-from-string term-line  79  97)
+                                                          (read-fixed-point-as-double-from-string term-line  97 111)
+                                                          (read-fixed-point-as-double-from-string term-line 111 131)))))))))))
       variable-to-series-set-plist)))
 
-(defmacro build-vsop87-for-body (body)
-  `(let ((vsop87-plist (vsop87-file-reader ,(concatenate 'string "vsop87/VSOP87E." (subseq body 0 3)))))
-     (defvar ,(read-from-string (format nil "*vsop-series-set-~a-x*" body)) (getf vsop87-plist :x))
-     (defvar ,(read-from-string (format nil "*vsop-series-set-~a-y*" body)) (getf vsop87-plist :y))
-     (defvar ,(read-from-string (format nil "*vsop-series-set-~a-z*" body)) (getf vsop87-plist :z))))
+(defmacro defvar-vsop87-for-body (body &optional (version "A"))
+  (let ((varname-x (read-from-string (format nil "*vsop-series-set-~a-x*" body)))
+        (varname-y (read-from-string (format nil "*vsop-series-set-~a-y*" body)))
+        (varname-z (read-from-string (format nil "*vsop-series-set-~a-z*" body))))
+    `(progn
+       (defvar ,varname-x)
+       (defvar ,varname-y)
+       (defvar ,varname-z))))
 
-(build-vsop87-for-body "sun")
-(build-vsop87-for-body "mercury")
-(build-vsop87-for-body "venus")
-(build-vsop87-for-body "earth")
-(build-vsop87-for-body "mars")
-(build-vsop87-for-body "jupiter")
-(build-vsop87-for-body "saturn")
-(build-vsop87-for-body "uranus")
-(build-vsop87-for-body "neptune")
+(defmacro build-vsop87-for-body (body &optional (version "A"))
+  (let ((varname-x (read-from-string (format nil "*vsop-series-set-~a-x*" body)))
+        (varname-y (read-from-string (format nil "*vsop-series-set-~a-y*" body)))
+        (varname-z (read-from-string (format nil "*vsop-series-set-~a-z*" body))))
+    `(let ((vsop87-plist (vsop87-file-reader ,(concatenate 'string "vsop87/VSOP87" version "." (subseq body 0 3)))))
+       (setq ,varname-x (getf vsop87-plist :x))
+       (setq ,varname-y (getf vsop87-plist :y))
+       (setq ,varname-z (getf vsop87-plist :z)))))
+
+(defvar-vsop87-for-body "sun")
+(defvar-vsop87-for-body "mercury")
+(defvar-vsop87-for-body "venus")
+(defvar-vsop87-for-body "earth")
+(defvar-vsop87-for-body "mars")
+(defvar-vsop87-for-body "jupiter")
+(defvar-vsop87-for-body "saturn")
+(defvar-vsop87-for-body "uranus")
+(defvar-vsop87-for-body "neptune")
+;; Earth-Moon Barycenter
+(defvar-vsop87-for-body "emb")
+
+(defun build-vsop87 ()
+  (build-vsop87-for-body "sun")
+  (build-vsop87-for-body "mercury")
+  (build-vsop87-for-body "venus")
+  (build-vsop87-for-body "earth")
+  (build-vsop87-for-body "mars")
+  (build-vsop87-for-body "jupiter")
+  (build-vsop87-for-body "saturn")
+  (build-vsop87-for-body "uranus")
+  (build-vsop87-for-body "neptune")
+  ;; Earth-Moon Barycenter
+  (build-vsop87-for-body "emb"))
+
+(build-vsop87)
 
 (defun evaluate-series (series julian-millenium)
   (*
@@ -142,7 +174,7 @@
 ;;; latitude, longitude, and radius (heliocentric spherical coordinates),
 ;;; and returns a vsop-reference-point
 (defun vsop-compute-reference-point (epoch vsop-x vsop-y vsop-z)
-  (let ((julian-millenium (- (/ epoch (* 60 60 24 365.25 1000))
+  (let ((julian-millenium (- (/ epoch #.(* 60 60 24 365.25 1000))
                              0
                              #+nil
                              (/ (* 30 365.25) 1000)))) ;Julian millenia since J2000

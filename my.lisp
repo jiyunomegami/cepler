@@ -54,6 +54,7 @@
   (push #p"~/lgj/cl-openal/" asdf:*central-registry*)
   (push #p"~/lgj/bordeaux-threads/" asdf:*central-registry*)
   (push #p"~/lgj/classimp/" asdf:*central-registry*)
+  (push #p"~/lgj/Vacietis/" asdf:*central-registry*)
   ;; (asdf:operate 'asdf:load-op :cffi)
   ;; (asdf:operate 'asdf:load-op :cl-opengl)
   ;; (asdf:operate 'asdf:load-op :cepl)
@@ -63,6 +64,7 @@
   ;; (asdf:operate 'asdf:load-op :cepl.sdl2)
   ;; (asdf:operate 'asdf:load-op :cepl.skitter.sdl2)
   (asdf:operate 'asdf:load-op :cl-alc)
+  ;;(asdf:operate 'asdf:load-op :vacietis)
   )
 
 (defun load-game ()

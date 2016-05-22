@@ -222,7 +222,13 @@
 
 (defvar *state-output-stream* t)
 
-(defparameter *gl-scale* (* 0.0000000001 1000))
+(defvar *draw-to-scale* nil)
+
+;; 695,700,000 m = 109.20 gl units
+;; 
+;;(defparameter *gl-scale* (* 0.0000000001 1000))
+;;(defparameter *gl-scale* (/ 5.00 695700000.0))
+(defparameter *gl-scale* (/ 109.20 695700000.0))
 (defvar *gl-planets*)
 
 (defun find-gl-planet (name)
@@ -353,7 +359,7 @@
     :initarg :z-series-set)))
 
 (defvar *vsop-available* nil)
-(when *vsop-series-set-sun-x*
+(when *vsop-series-set-earth-x*
   (setq *vsop-available* t))
 (defvar *use-vsop* *vsop-available*)
 
@@ -400,14 +406,14 @@
 (defclass star (spherical-body) ())
 (defclass vsop-star (star vsop-body) ())
 
-(defvar *sun* (make-instance 'vsop-star
-                             :name "Sun"
-                             :mass 1.9891d30
-                             :radius 695500000d0
-                             :vsop-base-interval 1049
-                             :x-series-set *vsop-series-set-sun-x*
-                             :y-series-set *vsop-series-set-sun-y*
-                             :z-series-set *vsop-series-set-sun-z*))
+(setq *sun* (make-instance 'vsop-star
+                           :name "Sun"
+                           :mass 1.9891d30
+                           :radius 695500000d0
+                           :vsop-base-interval 1049
+                           :x-series-set *vsop-series-set-sun-x*
+                           :y-series-set *vsop-series-set-sun-y*
+                           :z-series-set *vsop-series-set-sun-z*))
 
 (defvar *mercury* (make-instance 'vsop-planet
                                  :name "Mercury"
@@ -486,6 +492,64 @@
                                  :mass 1.46d22
                                  :radius 1185000d0))
 
+(defvar *use-elp* nil)
+
+(defclass elp-body (space-object)
+  ((elp-pos
+    :initform (make-vector-3)
+    :initarg :elp-pos)
+   (elp-vel
+    :initform (make-vector-3)
+    :initarg :elp-vel)))
+
+(defvar *moon* (make-instance 'elp-body
+                              :name "Moon"
+                              :mass 7.30d22
+                              :radius 1737500d0))
+
+(defmethod compute-forces :around ((obj elp-body) dt)
+  (if *use-elp*
+      ;; VSOP87 uses millenia (1000 years)
+      ;; ELP2000-82 uses julian days (days since 1 January 4713 BC.)
+      (let ((m (ln_get_lunar_geo_posn (+ (/ *epoch-time* #.(* 24 60 60)) 2451545.0d0))))
+        (with-slots (elp-pos elp-vel pos vel acc) obj
+          (let* ((s (if *draw-to-scale* 1.0 72.0))
+                 (x (* (aref m 0) 1000.0d0 s))
+                 (y (* (aref m 1) 1000.0d0 s))
+                 (z (* (aref m 2) 1000.0d0 s)))
+            (let* ((earth-pos (slot-value *earth*
+                                          (if *use-vsop*
+                                              'vsop-pos
+                                              'pos)))
+                   (moon-pos (v! (+ x (v:x earth-pos))
+                                 (+ y (v:y earth-pos))
+                                 (+ z (v:z earth-pos)))))
+              (setf elp-pos moon-pos)))
+          (setf elp-vel (mult (/ 1 dt) (sub elp-pos pos)))
+          (setf acc     (mult (/ 1 dt) (sub elp-vel vel)))))
+      (call-next-method)))
+
+(defmethod integrate-acc-to-vel :around ((obj elp-body) dt)
+  (if *use-elp*
+      (with-slots (vel elp-vel) obj
+        (setf vel elp-vel))
+      (call-next-method)))
+
+(defmethod integrate-vel-to-pos :around ((obj elp-body) dt)
+  (if *use-elp*
+      (with-slots (pos elp-pos) obj
+        (setf pos elp-pos))
+      (call-next-method)))
+
+(defun em ()
+  (let* ((moon-pos (slot-value *moon* 'pos))
+         (earth-pos (slot-value *earth* 'pos))
+         (er-pos (v:- moon-pos earth-pos)))
+    (values er-pos
+            (v3:length er-pos)
+            (v3:*s er-pos *gl-scale*)
+            (v3:length (v3:*s er-pos *gl-scale*)))))
+
 (defun output-initial-conditions ()
   (dolist (obj *all-objs*)
     (format t "(setf (slot-value *~A* 'pos) (make-array 3 :element-type 'single-float :initial-contents '~A))~%"
@@ -543,7 +607,7 @@
                                  :vel (let ((earth-vel (slot-value *earth* 'vel)))
                                         earth-vel)
                                  :radius 1185000d0)))
-  (setq *all-objs* (list *sun* *mercury* *venus* *earth* *mars* *jupiter* *saturn* *uranus* *neptune*
+  (setq *all-objs* (list *sun* *mercury* *venus* *earth* *moon* *mars* *jupiter* *saturn* *uranus* *neptune*
                          #+nil
                          *pluto*)))
 
@@ -604,7 +668,7 @@
 (defun detect-collisions (obj)
   (setq *colliding* nil)
   (let* ((radius-factor (if *sun-actual-size*
-                            (* *radius-factor* #.(/ 5.0 109.0))
+                            (* *radius-factor* #.(/ 5.0 109.20))
                             *radius-factor*))
          (obj-pos (slot-value obj 'pos))
          (obj-radius (* radius-factor (slot-value obj 'radius)))

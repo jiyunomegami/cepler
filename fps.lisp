@@ -34,10 +34,7 @@
         (text-setf *fps-text* (format nil "FPS: ~,1f" fps))
         (text-setf *console-text*
                    (format nil "~A ~A" *fps-text*
-                           (format nil "~%step: ~,2f days/s~%VSOP87: ~A~%"
-                                   (/ *time-acceleration* (* 24 60 60))
-                                   (if *use-vsop* "on" "off")
-                                   ;;(if *normal-mapping-enabled* "NM on" "NM off")
-                                   )))
+                           (format nil "~%step: ~,2f days/s"
+                                   (/ *time-acceleration* (* 24 60 60)))))
         (setf fps-frames 0
               fps-start-time (get-internal-real-time))))))

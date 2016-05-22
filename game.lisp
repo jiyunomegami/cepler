@@ -5,11 +5,12 @@
 (defvar *targeting* nil)
 (defvar *following* nil)
 (defvar *follow-sun-lock* nil)
+(defvar *follow-moon-lock* nil)
 
 (defparameter *time-acceleration-factor* 2)
 
 (defparameter *movement-scale* (* 1000 0.07))
-(defparameter *mouse-sensitivity* 0.005)
+(defparameter *mouse-sensitivity* 0.003)
 
 ;; Should be far enough away from the edges of the window
 (defparameter *mouse-x-pos* 400)
@@ -76,6 +77,14 @@
 (defvar *sphere-index* nil)
 (defvar *sphere-stream* nil)
 
+(defun draw-to-scale ()
+  (setq *draw-to-scale* (not *draw-to-scale*))
+  (if *draw-to-scale*
+      (setq *movement-scale* (* 1000 0.07 0.02)
+            *mouse-sensitivity* (* 0.005 0.5))
+      (setq *movement-scale* (* 1000 0.07)
+            *mouse-sensitivity* 0.005)))
+
 (defun add-gl-planet (&key
                         (name "")
                         (day 1)
@@ -85,11 +94,11 @@
                         (texture "ear.jpg"))
   (when *sun-actual-size*
     (unless (equalp name "Sun")
-      (setq radius (* (/ 5.00 109) radius))))
+      (setq radius (* (/ 5.00 109.20) radius))))
   (let ((gl-planet
          (make-instance 'gl-planet
                         :name name
-                        :radius (* 1000.0 radius) ;;XXX fix cloud clipping issue by making everything bigger
+                        :radius (* 1000.0 (if *draw-to-scale* (/ 1 45.78668) 1) radius) ;;XXX fix cloud clipping issue by making everything bigger
                         :day day
                         :obliquity obliquity
                         :pos pos
@@ -102,16 +111,16 @@
 
 ;; Body	Diameter
 ;; (Earth = 1)
-;; Sun	109
-;; Mercury	.38
-;; Venus	.95
-;; Earth	1
-;; Mars	.53
-;; Jupiter	11.19
-;; Saturn	9.40
-;; Uranus	4.04
-;; Neptune	3.88
-;; Pluto	.18
+;; Sun	     109.20
+;; Mercury     0.38
+;; Venus       0.95
+;; Earth       1.00
+;; Mars        0.53
+;; Jupiter    11.19
+;; Saturn      9.40
+;; Uranus      4.04
+;; Neptune     3.88
+;; Pluto       0.18
 ;;                         Distance  O_Period				   
 ;; Name       #     Orbits (000 km)   (days)    Incl Eccen  Discoverer   Date   A.K.A.
 ;; -------  ---- ------- --------  --------  ----- -----  ----------   ----  -------
@@ -127,6 +136,12 @@
 ;; Neptune    VIII Sun      4504300 60190.00    1.77  0.01  Adams(9)     1846  (0)
 ;; Pluto      IX   Sun      5913520 90550      17.15  0.25  Tombaugh     1930  (0)
 
+;; Sun radius:   695,700 km
+;; Earth radius:   6,371 km
+
+(defvar *gl-earth* nil)
+(defvar *gl-moon* nil)
+
 (defun init-gl-planets ()
   (setq *gl-planets* nil)
   (add-gl-planet :name "Sun"     :radius  5.00   :pos (v!   0.0000 0 0)   :texture "sun.jpg"       :day 0)
@@ -140,6 +155,9 @@
   (add-gl-planet :name "Neptune" :radius  3.88   :pos (v! 450.4300 0 0)   :texture "nep0fds1.jpg"  :day (/ 24 16.1)     :obliquity (radians 28.3))
   #+nil
   (add-gl-planet :name "Pluto"   :radius  0.18   :pos (v! 591.3520 0 0)   :texture "plu0rss1.jpg"  :day (/ 24 -153.3))
+  (add-gl-planet :name "Moon"    :radius  0.27   :pos (v!  14.9600 0 0)   :texture "moonmap2k.jpg" :day (/ 24 33.0 #+nil 655.7)    :obliquity (radians 6.7))
+  (setq *gl-earth* (find-gl-planet "Earth"))
+  (setq *gl-moon* (find-gl-planet "Moon"))
   (init-rings)
   (load-texture-set *texture-set*))
 
@@ -224,9 +242,6 @@
 
 (def-g-> draw-sphere () #'sphere-vert #'sphere-frag)
 
-
-(defvar *normal-mapping-enabled* t)
-(defvar *lighting-enabled* t)
 
 (defclass light ()
   ((position :initform (v! 0 0 0) :initarg :pos :accessor pos)
@@ -333,6 +348,59 @@
          (normal (normalize vertex-normal))
          (tangent (normalize (cross normal light-dir)))
          (binormal (normalize (cross normal tangent)))
+         (bumpmap-strength (*
+                            (/ 1500.0 camera-distance)
+                            #+nil
+                            (if (> camera-distance 3000.0)
+                                (/ 1500.0 camera-distance)
+                                1.0)
+                            20.0 (/ (v:x bump-dimensions) 8192.0)))
+         (bm0 (v:x (texture norm-map %tex-coord)))
+         (bmup (v:x (texture norm-map (+ %tex-coord (v! 0 (/ 1.0 (v:y bump-dimensions)))))))
+         (bmright (v:x (texture norm-map (+ %tex-coord (v! (/ 1.0 (v:x bump-dimensions)) 0)))))
+         (bump-vector (* 1 (+ (* (- bmright bm0) binormal)
+                              (* (- bmup bm0) tangent))))
+         (bumped-normal (normalize (+ normal (* bumpmap-strength bump-vector))))
+         (dummy-light-dir (* binormal -1.0))
+         (dummy-cos-ang-incidence
+          (clamp (dot bumped-normal dummy-light-dir)
+                 0.0 1.0))
+         (cos (dot bumped-normal light-dir))
+         (cos-ang-incidence
+          (clamp cos
+                 0.0 1.0))
+         (c-tc (v! (/ (+ 3.1415927 (atan (+ (* 0.013 (v:x light-dir)) (v:x model-space-pos))
+                                         (+ (* 0.013 (v:z light-dir)) (v:z model-space-pos)))) (* 2 3.1415927))
+                   (v:y tex-coord)))
+         (t-col (texture tex %tex-coord))
+         (col t-col))
+    (+ (* col light-intensity cos-ang-incidence)
+       (* col ambient-intensity dummy-cos-ang-incidence)
+       (* col ambient-intensity))))
+
+(defun-g night-bump-frag ((model-space-pos :vec3)
+                    (vertex-normal :vec3)
+                    (diffuse-color :vec4)
+                    (tex-coord :vec2)
+                    &uniform
+                    (model->clip :mat4)
+                    (model-space-light-pos :vec3)
+                    (light-intensity :vec4)
+                    (ambient-intensity :vec4)
+                    (tex :sampler-2d)
+                    (night-tex :sampler-2d)
+                    (clouds-tex :sampler-2d)
+                    (camera-distance :float)
+                    (norm-map :sampler-2d))
+  (let* ((bump-dimensions (texture-size norm-map 0))
+         (%tex-coord (v! (/ (+ 3.1415927 (atan (v:x model-space-pos) (v:z model-space-pos))) (* 2 3.1415927))
+                         (v:y tex-coord)))
+         (temp (- model-space-pos
+                  model-space-light-pos))
+         (light-dir (normalize temp))
+         (normal (normalize vertex-normal))
+         (tangent (normalize (cross normal light-dir)))
+         (binormal (normalize (cross normal tangent)))
          (bumpmap-strength (* 20.0 (/ (v:x bump-dimensions) 8192.0)))
          (bm0 (v:x (texture norm-map %tex-coord)))
          (bmup (v:x (texture norm-map (+ %tex-coord (v! 0 (/ 1.0 (v:y bump-dimensions)))))))
@@ -361,12 +429,12 @@
            (* 0.5 (+ 1 (cos (/ (* angle angle) (* 1 3.1415927))))))
          (unlighted
           (- 1 lighted))
-         (i (* 8
+         (i (* 7
                (v:x n-t-col)
                (v:y n-t-col)
                (v:z n-t-col)))
          (w (v:w n-t-col))
-         (col (+ (* t-col (max 0.5 lighted))
+         (col (+ (* t-col (max 0.1 lighted))
                  (* (v! i i i w)
                     unlighted))))
     (+ (* col light-intensity cos-ang-incidence)
@@ -400,7 +468,11 @@
          (normal (normalize vertex-normal))
          (tangent (normalize (cross normal light-dir)))
          (binormal (normalize (cross normal tangent)))
-         (bumpmap-strength (* (- 1 (v:w c-col)) (- 1 (v:w c-col)) 20.0 (/ (v:x bump-dimensions) 8192.0)))
+         (bumpmap-strength (* (- 1 (v:w c-col))
+                              (- 1 (v:w c-col))
+                              (/ 1500.0 camera-distance)
+                              20.0
+                              (/ (v:x bump-dimensions) 8192.0)))
          (bm0 (v:x (texture norm-map %tex-coord)))
          (bmup (v:x (texture norm-map (+ %tex-coord (v! 0 (/ 1.0 (v:y bump-dimensions)))))))
          (bmright (v:x (texture norm-map (+ %tex-coord (v! (/ 1.0 (v:x bump-dimensions)) 0)))))
@@ -430,7 +502,7 @@
                (v:y n-t-col)
                (v:z n-t-col)))
          (w (v:w n-t-col))
-         (col (+ (* t-col (max 0.4 lighted))
+         (col (+ (* t-col (max 0.1 lighted))
                  (* (+ (v! i i i w)
                        n-t-col)
                     unlighted))))
@@ -449,7 +521,7 @@
       ;; render clouds on one sphere
       ((> camera-distance 3000.0)
        (let* ((c-col (texture clouds-tex %tex-coord))
-              (f (- 0.8 (* 0.2 cos-ang-incidence)))
+              (f (- 0.8 (* 0.1 cos-ang-incidence)))
               (a (clamp (max 0.0 (* f (v:w c-col))) 0.0 1.0)))
          (setf col (v! (+ (* (v:x col) (- 1 a)) (* (v:x c-col) a))
                        (+ (* (v:y col) (- 1 a)) (* (v:y c-col) a))
@@ -462,9 +534,14 @@
        (* col ambient-intensity))))
 
 (def-g-> frag-point-light () #'nm-vert #'nm-frag)
-(def-g-> frag-point-light-bump () #'nm-vert #'bump-frag)
 (def-g-> frag-point-light-nonm () #'nm-vert #'nonm-frag)
+(def-g-> frag-point-light-bump () #'nm-vert #'bump-frag)
+(def-g-> frag-point-light-night-bump () #'nm-vert #'night-bump-frag)
 (def-g-> frag-point-light-clouds-bump () #'nm-vert #'clouds-bump-frag)
+
+(defparameter *light-intensity* (v4:*s (v! 1 1 1 0) 1.5))
+;;(defparameter *ambient-intensity* (v! (v3:*s (v! 1 1 1) 0.01) 1.0))
+(defparameter *ambient-intensity* (v! (v3:*s (v! 1 1 1) 0.1) 1.0))
 
 (defun render-clouds (gl-planet factor)
   (when (> (v:length (v:- (pos *camera*) (pos gl-planet))) 3000.0)
@@ -507,8 +584,8 @@
                  :model->clip (model->clip obj *camera*)
                  :radius radius
                  :model-space-light-pos (v:s~ cam-light-vec :xyz)
-                 :light-intensity #.(v4:*s (v! 1 1 1 0) 1.5)
-                 :ambient-intensity #.(v! 0.1 0.1 0.1 1.0)
+                 :light-intensity *light-intensity*
+                 :ambient-intensity *ambient-intensity*
                  :norm-map nil
                  :night-tex nil
                  :tex clouds-texture))
@@ -522,6 +599,7 @@
   (if *lighting-enabled*
       (let* ((norm-map (gl-planet-normal-texture gl-planet))
              (bump-map (gl-planet-bump-texture gl-planet))
+             (night-map (gl-planet-night-texture gl-planet))
              (clouds-map (gl-planet-clouds-texture gl-planet))
              (to-model-space-transformation (cam-light-model->world factor gl-planet))
              (cam-light-vec (m4:*v to-model-space-transformation
@@ -529,8 +607,10 @@
         (map-g (cond
                  ((and *normal-mapping-enabled* norm-map)
                   #'frag-point-light)
-                 ((and *normal-mapping-enabled* bump-map clouds-map)
+                 ((and *normal-mapping-enabled* bump-map night-map clouds-map)
                   #'frag-point-light-clouds-bump)
+                 ((and *normal-mapping-enabled* bump-map night-map)
+                  #'frag-point-light-night-bump)
                  ((and *normal-mapping-enabled* bump-map)
                   #'frag-point-light-bump)
                  (t
@@ -539,10 +619,10 @@
                :model->clip (model->clip gl-planet *camera*)
                :radius (gl-planet-radius gl-planet)
                :model-space-light-pos (v:s~ cam-light-vec :xyz)
-               :light-intensity #.(v4:*s (v! 1 1 1 0) 1.5)
-               :ambient-intensity #.(v! 0.1 0.1 0.1 1.0)
+               :light-intensity *light-intensity*
+               :ambient-intensity *ambient-intensity*
                :norm-map (if bump-map bump-map norm-map)
-               :night-tex (gl-planet-night-texture gl-planet)
+               :night-tex night-map
                :clouds-tex (gl-planet-clouds-texture gl-planet)
                :camera-distance (v:length (v:- (pos *camera*) (pos gl-planet)))
                :tex (gl-planet-texture gl-planet)))
@@ -654,12 +734,26 @@
 
   (with-blending *blending-params*
     (dolist (gl-planet *gl-planets*)
-      (setf (rot gl-planet)
-            (q:* (q:from-axis-angle (v! -1 0 0) (gl-planet-obliquity gl-planet))
-                 (q:* (q:from-axis-angle (v! 0 0 1) (* (gl-planet-day gl-planet) *rotation-factor*
-                                                       (/ *time-acceleration* (* 24 60 60))))
-                      ;; align with the texture
-                      #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float)))))
+      (if (eq *gl-moon* gl-planet)
+          (setf (rot gl-planet)
+                (let* ((gl-earth *gl-earth*)
+                       (earth-pos (pos gl-earth))
+                       (pos (v:normalize (v3:- (pos gl-planet) earth-pos)))
+                       (vel (v:normalize (slot-value *moon* 'vel)))
+                       (axis (cross pos vel)))
+                  (q:*
+                   (q:from-axis-angle axis (coerce (atan2 (v:x pos) (v:y pos)) 'single-float))
+                   (q:* (q:from-axis-angle (v! -1 0 0) (gl-planet-obliquity gl-planet))
+                        #.(q:*
+                           #.(q:from-axis-angle (v:normalize (v! 0 0 -1)) (coerce (/ pi 2) 'single-float))
+                           ;; align with the texture
+                           #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float)))))))
+          (setf (rot gl-planet)
+                (q:* (q:from-axis-angle (v! -1 0 0) (gl-planet-obliquity gl-planet))
+                     (q:* (q:from-axis-angle (v! 0 0 1) (* (gl-planet-day gl-planet) *rotation-factor*
+                                                           (/ *time-acceleration* (* 24 60 60))))
+                          ;; align with the texture
+                          #.(q:from-axis-angle (v! 1 0 0) (coerce (/ pi 2) 'single-float))))))
       (if *cull-test-fov-cos*
           (let ((dot (v3:dot (v3:normalize (v3:- (pos gl-planet) (pos *camera*))) (dir *camera*))))
             (when (>= dot *cull-test-fov-cos*)
@@ -815,7 +909,12 @@
   (when *following*
     (text-setf *camera-text* (format nil "Following ~A~A"
                                      (slot-value *following* 'name)
-                                     (if *follow-sun-lock* "-Sun" "")))
+                                     (cond
+                                       (*follow-sun-lock* "-Sun")
+                                       ((and *follow-moon-lock*
+                                             (not (eq *moon* *following*)))
+                                        "-Moon")
+                                       (t ""))))
     (camera-follow-start *following*)))
 
 (defun unfollow ()
@@ -870,9 +969,12 @@
                   (v3:*s (dir *camera*) *follow-direction*)
                   (v3:*s (v3:normalize rel-pos) *follow-direction*)))
          (radius (slot-value obj 'radius))
-         (gl-radius (coerce (* 152.0 (if *sun-actual-size* (/ 5.0 109) 1) *gl-scale* radius) 'single-float))
-         (off (v3:*s (v3:+ (v! 0.0 0.0 (+ 2.0 (* (log gl-radius 2) 0.2)))
-                           (v3:*s dir (* 5.0)))
+         (gl-radius (coerce (* (if *draw-to-scale* 1 152.0)
+                               (if *sun-actual-size* (/ 5.0 109.20) 1)
+                               *gl-scale*
+                               radius) 'single-float))
+         (off (v3:*s (v3:+ (v! 0.0 0.0 (+ (if *draw-to-scale* 10.0 1.0) (* (log gl-radius 2) 0.2)))
+                           (v3:*s dir (* (if *draw-to-scale* 20.0 5.0))))
                      (* gl-radius 2)))
          (gl-pos (v3:*s rel-pos *gl-scale*)))
     (when *follow-camera*
@@ -880,6 +982,14 @@
     (when *follow-sun-lock*
       (setf (dir *camera*) (v3:*s dir -1.0))
       (setf (world-up *camera*) (v! 0.0 0.0 1.0)))
+    (when (and *follow-moon-lock* (not (eq *moon* *following*)))
+      (let* ((rel-pos (relative-position obj *moon*))
+             (dir (v3:*s (v3:normalize rel-pos) *follow-direction*)))
+        (setf (dir *camera*) (v3:*s dir -1.0))
+        (setf off (v3:*s (v3:+ (v! 0.0 0.0 0.0)
+                               (v3:*s dir (* -1 2.0)))
+                         (* gl-radius 2)))
+        (setf (world-up *camera*) (v! 0.0 0.0 1.0))))
     (setf (pos *camera*) (v3:+ gl-pos off))))
 
 (defun camera-follow-start (obj)
@@ -934,6 +1044,8 @@
   (setf (pos *camera*) (v! 0 0 (* 1000 260.0)))
   (setf (far *camera*) 1000000.0)
   (sdl2:show-cursor))
+
+(define-modify-macro multf (s) * "Multiply place by s")
 
 ;; called periodically with a null event
 (defun %keyboard-callback (event timestamp)
@@ -993,6 +1105,20 @@
       (let ((following *following*))
         (reset-sim)
         (when following
+          (follow following))))
+    (when (skitter:key-down-p key.k)
+      (draw-to-scale)
+      (let ((following *following*))
+        (init-gl-planets)
+        (when *gl-pluto*
+          (setq *gl-pluto* (add-gl-planet :name (gl-planet-name *gl-pluto*)
+                                          :radius 0.18
+                                          :pos (pos *gl-pluto*)
+                                          :texture "plu0rss1.jpg"
+                                          :day (gl-planet-day *gl-pluto*)
+                                          :obliquity (gl-planet-obliquity *gl-pluto*))))
+        (when following
+          (unfollow)
           (follow following))))
     (when (skitter:key-down-p key.j)
       (let ((following *following*))
@@ -1097,26 +1223,39 @@
                         *earth*))))))
 
   (when (skitter:key-down-p key.z)
+    (multf (fov *camera*) 0.9)
+    #+nil
     (incf (fov *camera*) rtg-math.base-maths:+one-degree-in-radians+))
   (when (skitter:key-down-p key.c)
+    (when (< (fov *camera*) (* 0.9 pi))
+      (multf (fov *camera*) (/ 1.0 0.9)))
+    #+nil
     (decf (fov *camera*) rtg-math.base-maths:+one-degree-in-radians+))
 
   (when (skitter:key-down-p key.x)
+    (setf (fov *camera*) (coerce (/ pi 3) 'single-float))
     (when *targeting*
       (reset-planets))
     (if *following*
         (when event
           (setq *follow-direction* (* -1.0 *follow-direction*)))))
   (when (skitter:key-down-p key.g)
-    (if *following*
-        (when event
-          (setq *follow-sun-lock* (not *follow-sun-lock*))
-          (text-setf *camera-text* (format nil "Following ~A~A"
-                                           (slot-value *following* 'name)
-                                           (if *follow-sun-lock* "-Sun" ""))))))
+    (when (and *following* event)
+      (setq *follow-moon-lock* nil)
+      (setq *follow-sun-lock* (not *follow-sun-lock*))
+      (text-setf *camera-text* (format nil "Following ~A~A"
+                                       (slot-value *following* 'name)
+                                       (if *follow-sun-lock* "-Sun" "")))))
+  (when (skitter:key-down-p key.h)
+    (when (and *following* event (eq *following* *earth*))
+      (setq *follow-sun-lock* nil)
+      (setq *follow-moon-lock* (not *follow-moon-lock*))
+      (text-setf *camera-text* (format nil "Following ~A~A"
+                                       (slot-value *following* 'name)
+                                       (if *follow-moon-lock* "-Moon" "")))))
   (let ((movement-scale
          (* (if (skitter:key-down-p key.lshift) 10 1)
-            (if *sun-actual-size* #.(/ 5.0 109.0) 1)
+            (if *sun-actual-size* #.(/ 5.0 109.20) 1)
             *movement-scale*))
         (camera (if (and *following* *follow-camera*)
                     *follow-camera*
