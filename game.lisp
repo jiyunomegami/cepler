@@ -105,7 +105,7 @@
                         :data *sphere-data*
                         :index *sphere-index*
                         :stream *sphere-stream*
-                        :texture (sample (load-texture texture)))))
+                        :texture (when texture (sample (load-texture texture))))))
     (push gl-planet *gl-planets*)
     gl-planet))
 
@@ -155,7 +155,7 @@
   (add-gl-planet :name "Neptune" :radius  3.88   :pos (v! 450.4300 0 0)   :texture "nep0fds1.jpg"  :day (/ 24 16.1)     :obliquity (radians 28.3))
   #+nil
   (add-gl-planet :name "Pluto"   :radius  0.18   :pos (v! 591.3520 0 0)   :texture "plu0rss1.jpg"  :day (/ 24 -153.3))
-  (add-gl-planet :name "Moon"    :radius  0.27   :pos (v!  14.9600 0 0)   :texture "moonmap2k.jpg" :day (/ 24 33.0 #+nil 655.7)    :obliquity (radians 6.7))
+  (add-gl-planet :name "Moon"    :radius  0.27   :pos (v!  14.9600 0 0)   :texture nil             :day (/ 24 33.0 #+nil 655.7)    :obliquity (radians 6.7))
   (setq *gl-earth* (find-gl-planet "Earth"))
   (setq *gl-moon* (find-gl-planet "Moon"))
   (init-rings)
