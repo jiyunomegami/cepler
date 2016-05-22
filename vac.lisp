@@ -1,6 +1,5 @@
 ;; load this to use ELP2000-82
 ;; Modifications to Vacietis are required
-;; The results of ln_get_lunar_geo_posn will not be accurate
 
 (in-package :cepler)
 
@@ -70,7 +69,9 @@
         (body (loop for x in body
                  when (not (and (listp x) (eq 'declare (car x))))
                  collect x)))
-    `(macrolet ((vacietis.c:< (&rest rest)
+    `(macrolet ((ceil (x)
+                  `(ceiling ,x))
+                (vacietis.c:< (&rest rest)
                   `(< ,@rest))
                 (vacietis.c:+ (&rest rest)
                   `(+ ,@rest))

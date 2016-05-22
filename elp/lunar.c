@@ -41,7 +41,11 @@ double ln_range_radians(double angle)
     return angle;
     
   //temp = (int)(angle / (M_PI * 2.0));
-  temp = (angle / (M_PI * 2.0));
+  if (angle > 0.0) {
+    temp = floor(angle / (M_PI * 2.0));
+  } else {
+    temp = ceil(angle / (M_PI * 2.0));
+  }
 
   if (angle < 0.0)
     temp --;
@@ -57,9 +61,14 @@ double ln_range_radians2(double angle)
     
   if (angle > (-2.0 * M_PI) && angle < (2.0 * M_PI))
     return angle;
-    
+
   //temp = (int)(angle / (M_PI * 2.0));
-  temp = (angle / (M_PI * 2.0));
+  if (angle > 0.0) {
+    temp = floor(angle / (M_PI * 2.0));
+  } else {
+    temp = ceil(angle / (M_PI * 2.0));
+  }
+
   temp *= (M_PI * 2.0);
   return angle - temp;
 }
@@ -1003,7 +1012,7 @@ static double sum_series_elp36(double *t)
 */
 /* ELP 2000-82B theory */
 double moon[3];
-double* ln_get_lunar_geo_posn(double jd)
+double* ln_get_lunar_geo_posn (double jd, int fast)
 {
 	double ct[5];
 	double elp[36];
@@ -1028,10 +1037,17 @@ double* ln_get_lunar_geo_posn(double jd)
 	elp[6] = sum_series_elp7(ct);
 	elp[7] = sum_series_elp8(ct);
 	elp[8] = sum_series_elp9(ct);
+
         // XXX 10,11,12 are very large and take a long time to compute
-	elp[9] = 0.0; //sum_series_elp10(ct);
-	elp[10] = 0.0; //sum_series_elp11(ct);
-	elp[11] = 0.0; //sum_series_elp12(ct);
+        if (fast == 1) {
+          elp[9] = 0.0; //sum_series_elp10(ct);
+          elp[10] = 0.0; //sum_series_elp11(ct);
+          elp[11] = 0.0; //sum_series_elp12(ct);
+        } else {
+          elp[9] = sum_series_elp10(ct);
+          elp[10] = sum_series_elp11(ct);
+          elp[11] = sum_series_elp12(ct);
+        }
 	elp[12] = sum_series_elp13(ct);
 	elp[13] = sum_series_elp14(ct);
 	elp[14] = sum_series_elp15(ct);
