@@ -63,14 +63,21 @@
                            (list (make-instance 'vsop-series
                                                 :alpha (read-int-from-string line 59 60)
                                                 :terms
-                                                (let (term-line)
-                                                  (loop for i from 1 upto (read-int-from-string line 60 67) collecting
-                                                       (progn
-                                                         (setf term-line (read-line file))
-                                                         (list
-                                                          (read-fixed-point-as-double-from-string term-line  79  97)
-                                                          (read-fixed-point-as-double-from-string term-line  97 111)
-                                                          (read-fixed-point-as-double-from-string term-line 111 131)))))))))))
+                                                (let ((terms
+                                                       (let (term-line)
+                                                         (loop for i from 1 upto (read-int-from-string line 60 67) collecting
+                                                              (progn
+                                                                (setf term-line (read-line file))
+                                                                (list
+                                                                 (read-fixed-point-as-double-from-string term-line  79  97)
+                                                                 (read-fixed-point-as-double-from-string term-line  97 111)
+                                                                 (read-fixed-point-as-double-from-string term-line 111 131))))))
+                                                      (array-terms))
+                                                  (dolist (term terms (nreverse array-terms))
+                                                    (push (make-array 3
+                                                                      :element-type 'double-float
+                                                                      :initial-contents term)
+                                                          array-terms)))))))))
       variable-to-series-set-plist)))
 
 (defmacro defvar-vsop87-for-body (body &optional (version "A"))
@@ -119,18 +126,33 @@
 (build-vsop87)
 
 (defun evaluate-series (series julian-millenium)
+  (declare (optimize (speed 3))
+           (type double-float julian-millenium))
   (*
-    (expt julian-millenium (slot-value series 'alpha))
-    (loop for term in (slot-value series 'terms) sum
+   (expt julian-millenium (slot-value series 'alpha))
+   (let ((sum 0.0d0))
+     (declare (type double-float sum))
+     (dolist (term (slot-value series 'terms) sum)
+       (declare (type (simple-array double-float (3)) term))
+       (incf sum (* (aref term 0)
+                    (cos (+ (aref term 1)
+                            (* julian-millenium (aref term 2))))))))
+     #+nil
+     (loop for term in (slot-value series 'terms) sum
+          (declare (type (simple-array double-float 3) term))
           (*
-            (first term)
-            (cos (+
-                   (second term)
-                   (* julian-millenium (third term))))))))
+           (first term)
+           (cos (+
+                 (second term)
+                 (* julian-millenium (third term))))))))
 
 (defun evaluate-series-set (series-set julian-millenium)
-  (loop for series in series-set sum
-        (evaluate-series series julian-millenium)))
+  (declare (optimize (speed 3))
+           (type double-float julian-millenium))
+  (let ((sum 0.0d0))
+    (declare (type double-float sum))
+    (dolist (series series-set sum)
+      (incf sum (evaluate-series series julian-millenium)))))
 
 (defclass vsop-reference-point ()
   ((pos
@@ -174,10 +196,8 @@
 ;;; latitude, longitude, and radius (heliocentric spherical coordinates),
 ;;; and returns a vsop-reference-point
 (defun vsop-compute-reference-point (epoch vsop-x vsop-y vsop-z)
-  (let ((julian-millenium (- (/ epoch #.(* 60 60 24 365.25 1000))
-                             0
-                             #+nil
-                             (/ (* 30 365.25) 1000)))) ;Julian millenia since J2000
+  (let ((julian-millenium (/ epoch #.(* 60 60 24 365.25 1000.0d0))))
+    (declare (type double-float julian-millenium))
     (make-instance 'vsop-reference-point
                    :epoch epoch
                    :pos (convert-to-spherical (v!
