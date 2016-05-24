@@ -211,7 +211,7 @@
 (defvar *epoch-time* 0d0)
 
 (defun timestep (dt)
-  (setf *epoch-time* (+ dt *epoch-time*))
+  (setf *epoch-time* (coerce (+ dt *epoch-time*) 'double-float))
   (loop for obj in *all-objs* do
        (compute-forces obj dt))
   (loop for obj in *all-objs* do
@@ -235,6 +235,16 @@
   (find-if #'(lambda (glp) (equalp name (gl-planet-name glp))) *gl-planets*))
 
 (defvar *sun*)
+(defvar *mercury*)
+(defvar *venus*)
+(defvar *earth*)
+(defvar *moon*)
+(defvar *mars*)
+(defvar *jupiter*)
+(defvar *saturn*)
+(defvar *uranus*)
+(defvar *neptune*)
+(defvar *pluto*)
 
 (defun update-positions ()
   (dolist (obj (cdr *all-objs*))
@@ -341,11 +351,11 @@
     :initarg :vsop-base-interval
     :documentation "The interval for interpolation between vsop-reference-points, scaled linearly with time acceleration")
    (vsop-ref-1
-    :initform (make-instance 'vsop-reference-point :epoch 0)
+    :initform (make-instance 'vsop-reference-point :epoch 0.0d0)
     :initarg :vsop-ref-1
     :documentation "A vsop-reference-point")
    (vsop-ref-2
-    :initform (make-instance 'vsop-reference-point :epoch -1)
+    :initform (make-instance 'vsop-reference-point :epoch -1.0d0)
     :initarg :vsop-ref-2
     :documentation "A vsop-reference-point")
    (x-series-set
@@ -406,91 +416,86 @@
 (defclass star (spherical-body) ())
 (defclass vsop-star (star vsop-body) ())
 
-(setq *sun* (make-instance 'vsop-star
-                           :name "Sun"
-                           :mass 1.9891d30
-                           :radius 695500000d0
-                           :vsop-base-interval 1049
-                           :x-series-set *vsop-series-set-sun-x*
-                           :y-series-set *vsop-series-set-sun-y*
-                           :z-series-set *vsop-series-set-sun-z*))
-
-(defvar *mercury* (make-instance 'vsop-planet
+(defun %init-planets ()
+  (setq *sun* (make-instance 'vsop-star
+                             :name "Sun"
+                             :mass 1.9891d30
+                             :radius 695500000d0
+                             :vsop-base-interval 1049.0d0
+                             :x-series-set *vsop-series-set-sun-x*
+                             :y-series-set *vsop-series-set-sun-y*
+                             :z-series-set *vsop-series-set-sun-z*))
+  (setq *mercury* (make-instance 'vsop-planet
                                  :name "Mercury"
                                  :mass 3.3022d23
                                  :radius 2439700d0
-                                 :vsop-base-interval 1000
+                                 :vsop-base-interval 1000.0d0
                                  :x-series-set *vsop-series-set-mercury-x*
                                  :y-series-set *vsop-series-set-mercury-y*
                                  :z-series-set *vsop-series-set-mercury-z*))
-
-(defvar *venus* (make-instance 'vsop-planet
+  (setq *venus* (make-instance 'vsop-planet
                                :name "Venus"
                                :mass 4.8685d24
                                :radius 6051800d0
-                               :vsop-base-interval 1001
+                               :vsop-base-interval 1001.0d0
                                :x-series-set *vsop-series-set-venus-x*
                                :y-series-set *vsop-series-set-venus-y*
                                :z-series-set *vsop-series-set-venus-z*))
-
-(defvar *earth* (make-instance 'vsop-planet
+  (setq *earth* (make-instance 'vsop-planet
                                :name "Earth"
                                :mass 5.9742d24
                                :radius 6.3781d6
-                               :vsop-base-interval 1002
+                               :vsop-base-interval 1002.0d0
                                :x-series-set *vsop-series-set-earth-x*
                                :y-series-set *vsop-series-set-earth-y*
                                :z-series-set *vsop-series-set-earth-z*))
-
-(defvar *mars* (make-instance 'vsop-planet
+  (setq *mars* (make-instance 'vsop-planet
                               :name "Mars"
                               :mass 6.4185d23
                               :radius 3386200d0
-                              :vsop-base-interval 1003
+                              :vsop-base-interval 1003.0d0
                               :x-series-set *vsop-series-set-mars-x*
                               :y-series-set *vsop-series-set-mars-y*
                               :z-series-set *vsop-series-set-mars-z*))
-
-(defvar *jupiter* (make-instance 'vsop-planet
+  (setq *jupiter* (make-instance 'vsop-planet
                                  :name "Jupiter"
                                  :mass 1.8986d27
                                  :radius 69000000d0
-                                 :vsop-base-interval 1004
+                                 :vsop-base-interval 1004.0d0
                                  :x-series-set *vsop-series-set-jupiter-x*
                                  :y-series-set *vsop-series-set-jupiter-y*
                                  :z-series-set *vsop-series-set-jupiter-z*))
-
-(defvar *saturn* (make-instance 'vsop-planet
+  (setq *saturn* (make-instance 'vsop-planet
                                 :name "Saturn"
                                 :mass 5.6846d26
                                 :radius 58000000d0
-                                :vsop-base-interval 1005
+                                :vsop-base-interval 1005.0d0
                                 :x-series-set *vsop-series-set-saturn-x*
                                 :y-series-set *vsop-series-set-saturn-y*
                                 :z-series-set *vsop-series-set-saturn-z*))
-
-(defvar *uranus* (make-instance 'vsop-planet
+  (setq *uranus* (make-instance 'vsop-planet
                                 :name "Uranus"
                                 :mass 8.6810d25
                                 :radius 25200000d0
-                                :vsop-base-interval 1006
+                                :vsop-base-interval 1006.0d0
                                 :x-series-set *vsop-series-set-uranus-x*
                                 :y-series-set *vsop-series-set-uranus-y*
                                 :z-series-set *vsop-series-set-uranus-z*))
-
-(defvar *neptune* (make-instance 'vsop-planet
+  (setq *neptune* (make-instance 'vsop-planet
                                  :name "Neptune"
                                  :mass 1.0243d26
                                  :radius 24500000d0
-                                 :vsop-base-interval 1007
+                                 :vsop-base-interval 1007.0d0
                                  :x-series-set *vsop-series-set-neptune-x*
                                  :y-series-set *vsop-series-set-neptune-y*
                                  :z-series-set *vsop-series-set-neptune-z*))
+  (setq *pluto* (make-instance 'space-object
+                               :name "Pluto"
+                               :mass 1.46d22
+                               :radius 1185000d0))
+  nil)
 
-(defvar *pluto* (make-instance 'space-object
-                                 :name "Pluto"
-                                 :mass 1.46d22
-                                 :radius 1185000d0))
+(%init-planets)
 
 (defvar *use-elp* nil)
 

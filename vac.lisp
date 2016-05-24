@@ -5,7 +5,7 @@
 
 (asdf:operate 'asdf:load-op :vacietis)
 
-(declaim (optimize (speed 3) (debug 0) (safety 1)))
+(declaim (optimize (speed 3) (debug 0) (safety 0)))
 (declaim (inline ln_range_radians ln_range_radians2))
 
 (defun compile-stuff (&optional elp)

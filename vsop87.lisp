@@ -22,16 +22,24 @@
 
 ;; "Gravitational constant"
 (defvar *G* 6.673d-11)
+(declaim (type double-float *G*))
 (defvar *m-per-au* 149598000000d0)
-(defvar *time-acceleration* 1)
+(declaim (type double-float *m-per-au*))
+(defvar *time-acceleration* 1.0d0)
 
 (defclass vsop-series ()
   ((alpha
-     :initform 0
-     :initarg :alpha)
+    :initform 0
+    :type (signed-byte 32)
+    :initarg :alpha)
+   (nterms
+    :initform 0
+    :type fixnum
+    :initarg :nterms)
    (terms
-     :initform ()
-     :initarg :terms)))
+    :initform ()
+    :type (simple-array double-float (* 3))
+    :initarg :terms)))
 
 ;;;; All the VSOP87 data is contained in the subdirectory vsop87
 
@@ -60,27 +68,33 @@
              ;;(format t "   alpha: ~A~%" (read-int-from-string line 59 60))
              (setf (getf variable-to-series-set-plist variable)
                    (append (getf variable-to-series-set-plist variable)
-                           (list (make-instance 'vsop-series
-                                                :alpha (read-int-from-string line 59 60)
-                                                :terms
-                                                (let ((terms
-                                                       (let (term-line)
-                                                         (loop for i from 1 upto (read-int-from-string line 60 67) collecting
-                                                              (progn
-                                                                (setf term-line (read-line file))
-                                                                (list
-                                                                 (read-fixed-point-as-double-from-string term-line  79  97)
-                                                                 (read-fixed-point-as-double-from-string term-line  97 111)
-                                                                 (read-fixed-point-as-double-from-string term-line 111 131))))))
-                                                      (array-terms))
-                                                  (dolist (term terms (nreverse array-terms))
-                                                    (push (make-array 3
-                                                                      :element-type 'double-float
-                                                                      :initial-contents term)
-                                                          array-terms)))))))))
+                           (list
+                            (let* ((terms-list
+                                    (let (term-line)
+                                      (loop for i from 1 upto (read-int-from-string line 60 67) collecting
+                                           (progn
+                                             (setf term-line (read-line file))
+                                             (list
+                                              (read-fixed-point-as-double-from-string term-line  79  97)
+                                              (read-fixed-point-as-double-from-string term-line  97 111)
+                                              (read-fixed-point-as-double-from-string term-line 111 131))))))
+                                   (terms
+                                    (let (array-terms)
+                                      (dolist (term terms-list
+                                               (make-array (list (length array-terms) 3)
+                                                           :element-type 'double-float
+                                                           :initial-contents (nreverse array-terms)))
+                                        (push (make-array 3
+                                                          :element-type 'double-float
+                                                          :initial-contents term)
+                                              array-terms)))))
+                              (make-instance 'vsop-series
+                                             :alpha (read-int-from-string line 59 60)
+                                             :terms terms
+                                             :nterms (car (array-dimensions terms)))))))))
       variable-to-series-set-plist)))
 
-(defmacro defvar-vsop87-for-body (body &optional (version "A"))
+(defmacro defvar-vsop87-for-body (body)
   (let ((varname-x (read-from-string (format nil "*vsop-series-set-~a-x*" body)))
         (varname-y (read-from-string (format nil "*vsop-series-set-~a-y*" body)))
         (varname-z (read-from-string (format nil "*vsop-series-set-~a-z*" body))))
@@ -125,34 +139,36 @@
 
 (build-vsop87)
 
+(declaim (inline evaluate-series))
+(declaim (ftype (function (vsop-series (double-float 0.0d0)) double-float) evaluate-series))
 (defun evaluate-series (series julian-millenium)
-  (declare (optimize (speed 3))
-           (type double-float julian-millenium))
-  (*
-   (expt julian-millenium (slot-value series 'alpha))
-   (let ((sum 0.0d0))
-     (declare (type double-float sum))
-     (dolist (term (slot-value series 'terms) sum)
-       (declare (type (simple-array double-float (3)) term))
-       (incf sum (* (aref term 0)
-                    (cos (+ (aref term 1)
-                            (* julian-millenium (aref term 2))))))))
-     #+nil
-     (loop for term in (slot-value series 'terms) sum
-          (declare (type (simple-array double-float 3) term))
-          (*
-           (first term)
-           (cos (+
-                 (second term)
-                 (* julian-millenium (third term))))))))
+  (declare (optimize (speed 3) (debug 0) (safety 0))
+           (type vsop-series series)
+           (type (double-float 0.0d0) julian-millenium))
+  (let* ((sum 0.0d0)
+         (terms (slot-value series 'terms))
+         (nterms (slot-value series 'nterms)))
+    (declare (type double-float sum)
+             (type fixnum nterms)
+             (type (simple-array double-float (* 3)) terms))
+    (dotimes (i nterms (* (expt julian-millenium
+                                (the (signed-byte 32) (slot-value series 'alpha)))
+                          sum))
+      (declare (type fixnum i))
+      (incf sum (* (aref terms i 0)
+                   (cos (+ (aref terms i 1)
+                           (* julian-millenium (aref terms i 2)))))))))
 
+(declaim (inline evaluate-series-set))
+(declaim (ftype (function (list (double-float 0.0d0)) double-float) evaluate-series-set))
 (defun evaluate-series-set (series-set julian-millenium)
   (declare (optimize (speed 3))
            (type double-float julian-millenium))
   (let ((sum 0.0d0))
     (declare (type double-float sum))
     (dolist (series series-set sum)
-      (incf sum (evaluate-series series julian-millenium)))))
+      (declare (type vsop-series series))
+      (incf sum (the double-float (evaluate-series series julian-millenium))))))
 
 (defclass vsop-reference-point ()
   ((pos
@@ -174,36 +190,43 @@
       ((< x 0) (* (sign y) (- pi angle)))
       ((= x 0) (* (sign y) (/ pi 2))))))
 
-(defun convert-from-spherical (argument)
-  (let ((longitude (v:x argument))
-        (latitude (v:y argument))
-        (radius (v:z argument)))
-    (v!
-     (* radius (cos longitude) (cos latitude))
-     (* radius (cos longitude) (sin latitude))
-     (* radius (sin longitude)))))
+(declaim (inline convert-from-spherical))
+(declaim (ftype (function (double-float double-float double-float) (simple-array single-float (3))) convert-from-spherical))
+(defun convert-from-spherical (longitude latitude radius)
+  (declare (optimize (speed 3) (debug 0) (safety 0))
+           (type double-float longitude latitude radius))
+  (v!
+   (* radius (cos longitude) (cos latitude))
+   (* radius (cos longitude) (sin latitude))
+   (* radius (sin longitude))))
 
-(defun convert-to-spherical (argument)
-  (let ((x (v:x argument))
-        (y (v:y argument))
-        (z (v:z argument)))
-    (v!
-     (if (= x y z 0) 0 (* -1 (- (acos (/ z (expt (+ (expt x 2) (expt y 2) (expt z 2)) 0.5))) (/ pi 2))))
-     (atan2 x y)
-     (expt (+ (expt x 2) (expt y 2) (expt z 2)) 0.5))))
+(declaim (inline convert-to-spherical))
+(declaim (ftype (function (double-float double-float double-float) (simple-array single-float (3))) convert-to-spherical))
+(defun convert-to-spherical (x y z)
+  (declare (optimize (speed 3) (debug 0) (safety 0))
+           (type double-float x y z))
+  (v!
+   (if (= x y z 0.0)
+       0.0
+       (* -1.0 (- (acos (/ z (expt (+ (expt x 2) (expt y 2) (expt z 2)) 0.5))) (/ pi 2))))
+   (atan2 x y)
+   (expt (+ (expt x 2) (expt y 2) (expt z 2)) 0.5)))
 
 ;;; Takes the time in seconds since the epoch, and VSOP series sets for
 ;;; latitude, longitude, and radius (heliocentric spherical coordinates),
 ;;; and returns a vsop-reference-point
 (defun vsop-compute-reference-point (epoch vsop-x vsop-y vsop-z)
-  (let ((julian-millenium (/ epoch #.(* 60 60 24 365.25 1000.0d0))))
+  (declare (optimize (speed 3) (debug 0) (safety 0))
+           (type (double-float 0.0d0) epoch))
+  (let ((julian-millenium (* epoch #.(/ 1.0 (* 60 60 24 365.25 1000.0d0)))))
+    (declare (type (double-float 0.0d0) julian-millenium))
     (declare (type double-float julian-millenium))
     (make-instance 'vsop-reference-point
                    :epoch epoch
-                   :pos (convert-to-spherical (v!
-                                               (* *m-per-au* (evaluate-series-set vsop-x julian-millenium))
-                                               (* *m-per-au* (evaluate-series-set vsop-y julian-millenium))
-                                               (* *m-per-au* (evaluate-series-set vsop-z julian-millenium)))))))
+                   :pos (convert-to-spherical
+                         (* *m-per-au* (evaluate-series-set vsop-x julian-millenium))
+                         (* *m-per-au* (evaluate-series-set vsop-y julian-millenium))
+                         (* *m-per-au* (evaluate-series-set vsop-z julian-millenium))))))
 
 ;;; Takes the time in seconds since the epoch, VSOP series sets for
 ;;; latitude, longitude, and radius (heliocentric spherical coordinates),
@@ -214,37 +237,43 @@
 ;;; position, and the two reference points that were actually used.
 ;;; Careful with that heliocentric position. Wouldn't want to forget to add
 ;;; it to the position of Sol.
-(let ((time-of-last-vsop-ref-recomputation 0) (first-time-step t))
+(let ((time-of-last-vsop-ref-recomputation 0.0d0) (first-time-step t))
+  (declare (type double-float time-of-last-vsop-ref-recomputation))
   (defun vsop-compute-position (epoch vsop-x vsop-y vsop-z interval vsop-ref-1 vsop-ref-2)
-    (if (or t ;; interpolation didn't work
-            (and (or (not (<= (slot-value vsop-ref-1 'epoch) epoch (slot-value vsop-ref-2 'epoch)))
-                     (< (* 1.1 interval *time-acceleration*) (- (slot-value vsop-ref-2 'epoch) (slot-value vsop-ref-1 'epoch))))
-                 (or (not (= time-of-last-vsop-ref-recomputation epoch))
-                     first-time-step)))
-      (progn
-        (if (and first-time-step (not (= time-of-last-vsop-ref-recomputation epoch)) (not (= 0 time-of-last-vsop-ref-recomputation)))
+    (declare (optimize (speed 3) (debug 0))
+             (type double-float interval))
+    (when (or t ;; interpolation didn't work
+              #+nil
+              (and (or (not (<= (slot-value vsop-ref-1 'epoch) epoch (slot-value vsop-ref-2 'epoch)))
+                       (< (* 1.1 interval *time-acceleration*) (- (slot-value vsop-ref-2 'epoch) (slot-value vsop-ref-1 'epoch))))
+                   (or (not (= time-of-last-vsop-ref-recomputation epoch))
+                       first-time-step)))
+      (if (and first-time-step
+               (not (= time-of-last-vsop-ref-recomputation epoch))
+               (not (= 0.0d0 time-of-last-vsop-ref-recomputation)))
           (setf first-time-step nil)) ; to ensure that we do all the vsop87 computations before the simulation gets started.
-        (setf time-of-last-vsop-ref-recomputation epoch) ; to ensure that lots of vsop87 computations all at once don't slow down the simulation too much. they'll keep after all.
-        (setf vsop-ref-1 (vsop-compute-reference-point                                     epoch  vsop-x vsop-y vsop-z))
-        (setf vsop-ref-2 (vsop-compute-reference-point (+ (* interval *time-acceleration*) epoch) vsop-x vsop-y vsop-z))))
-    (let*
-      ((epoch-1 (slot-value vsop-ref-1 'epoch))
-       (epoch-2 (slot-value vsop-ref-2 'epoch))
-       (interval (- epoch-2 epoch-1))
-       (short-interval (- epoch epoch-1)))
+      (setf time-of-last-vsop-ref-recomputation epoch) ; to ensure that lots of vsop87 computations all at once don't slow down the simulation too much. they'll keep after all.
+      (setf vsop-ref-1 (vsop-compute-reference-point                                     epoch  vsop-x vsop-y vsop-z))
+      (setf vsop-ref-2 (vsop-compute-reference-point (+ (* interval (coerce *time-acceleration* 'double-float)) epoch) vsop-x vsop-y vsop-z)))
+    (let* ((epoch-1 (slot-value vsop-ref-1 'epoch))
+           (epoch-2 (slot-value vsop-ref-2 'epoch))
+           (interval (- epoch-2 epoch-1))
+           (short-interval (- epoch epoch-1)))
+      (declare (type double-float epoch-1 epoch-2 interval short-interval))
       (values
-       (convert-from-spherical
-        (with-slots ((vsop-ref-1-pos pos)) vsop-ref-1
-          (with-slots ((vsop-ref-2-pos pos)) vsop-ref-2
-            (v!
-             (+ (v:x vsop-ref-1-pos) ;; longitude
-                (* short-interval (/ (- (v:x vsop-ref-2-pos) (v:x vsop-ref-1-pos))
+       (with-slots ((vsop-ref-1-pos pos)) vsop-ref-1
+         (declare (type (simple-array single-float (3)) vsop-ref-1-pos))
+         (with-slots ((vsop-ref-2-pos pos)) vsop-ref-2
+           (declare (type (simple-array single-float (3)) vsop-ref-2-pos))
+           (convert-from-spherical
+            (+ (coerce (v:x vsop-ref-1-pos) 'double-float) ;; longitude
+               (* short-interval (/ (coerce (- (v:x vsop-ref-2-pos) (v:x vsop-ref-1-pos)) 'double-float)
+                                    interval)))
+             (+ (coerce (v:y vsop-ref-1-pos) 'double-float) ;; latitude
+                (* short-interval (/ (coerce (- (v:y vsop-ref-2-pos) (v:y vsop-ref-1-pos)) 'double-float)
                                      interval)))
-             (+ (v:y vsop-ref-1-pos) ;; latitude
-                (* short-interval (/ (- (v:y vsop-ref-2-pos) (v:y vsop-ref-1-pos))
-                                     interval)))
-             (+ (v:z vsop-ref-1-pos) ;; radius
-                (* short-interval (/ (- (v:z vsop-ref-2-pos) (v:z vsop-ref-1-pos))
-                                     interval)))))))
-        vsop-ref-1
-        vsop-ref-2))))
+             (+ (coerce (v:z vsop-ref-1-pos) 'double-float) ;; radius
+                (* short-interval (/ (coerce (- (v:z vsop-ref-2-pos) (v:z vsop-ref-1-pos)) 'double-float)
+                                     interval))))))
+       vsop-ref-1
+       vsop-ref-2))))

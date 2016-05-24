@@ -912,7 +912,8 @@
                                      (cond
                                        (*follow-sun-lock* "-Sun")
                                        ((and *follow-moon-lock*
-                                             (not (eq *moon* *following*)))
+                                             (not (eq *moon* *following*))
+                                             (not (eq *vessel* *following*)))
                                         "-Moon")
                                        (t ""))))
     (camera-follow-start *following*)))
@@ -982,7 +983,9 @@
     (when *follow-sun-lock*
       (setf (dir *camera*) (v3:*s dir -1.0))
       (setf (world-up *camera*) (v! 0.0 0.0 1.0)))
-    (when (and *follow-moon-lock* (not (eq *moon* *following*)))
+    (when (and *follow-moon-lock*
+               (not (eq *moon* *following*))
+               (not (eq *vessel* *following*)))
       (let* ((rel-pos (relative-position obj *moon*))
              (dir (v3:*s (v3:normalize rel-pos) *follow-direction*)))
         (setf (dir *camera*) (v3:*s dir -1.0))
@@ -1002,7 +1005,7 @@
     (camera-follow obj)))
 
 (defun init-sim ()
-  (setq *time-acceleration* (* 24 60 60))
+  (setq *time-acceleration* (* 24 60 60.0e0))
   (setq *epoch-time* (- (get-universal-time) (encode-universal-time 0 0 0 1 1 2000)))
   (tanstaafl-main-loop-step 0)
   (update-positions))

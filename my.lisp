@@ -65,6 +65,7 @@
   ;; (asdf:operate 'asdf:load-op :cepl.skitter.sdl2)
   (asdf:operate 'asdf:load-op :cl-alc)
   ;;(asdf:operate 'asdf:load-op :vacietis)
+  (asdf:operate 'asdf:load-op :cepl)
   )
 
 (defun load-game ()
@@ -96,10 +97,12 @@
     (setq *quicklisp-only* quicklisp-only)
     (if quicklisp-only
         (load-using-quicklisp)
-        (load-stuff))
-    (load-game)))
+        (load-stuff))))
 
 (load-all)
+(declaim (inline rtg-math.base-vectors:x rtg-math.base-vectors:y rtg-math.base-vectors:z))
+(declaim (ftype (function ((simple-array single-float (*))) single-float) rtg-math.base-vectors:x rtg-math.base-vectors:y rtg-math.base-vectors:z))
+(load-game)
 
 (defparameter *swank-loopback-address* "127.0.0.1")
 (defparameter *swank-port* 5005)
