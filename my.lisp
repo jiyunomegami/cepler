@@ -77,7 +77,7 @@
     (read-line *query-io*))
   (push #p"~/lgj/cepler/" asdf:*central-registry*)
   (asdf:operate 'asdf:load-op :cepler)
-  (load "ft.lisp"))
+  (load "vac.lisp"))
 
 (defun load-openal ()
   (ql:quickload "bordeaux-threads")

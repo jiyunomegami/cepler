@@ -41,11 +41,7 @@ double ln_range_radians(double angle)
     return angle;
     
   //temp = (int)(angle / (M_PI * 2.0));
-  if (angle > 0.0) {
-    temp = floor(angle / (M_PI * 2.0));
-  } else {
-    temp = ceil(angle / (M_PI * 2.0));
-  }
+  temp = truncl(angle / (M_PI * 2.0));
 
   if (angle < 0.0)
     temp --;
@@ -63,11 +59,7 @@ double ln_range_radians2(double angle)
     return angle;
 
   //temp = (int)(angle / (M_PI * 2.0));
-  if (angle > 0.0) {
-    temp = floor(angle / (M_PI * 2.0));
-  } else {
-    temp = ceil(angle / (M_PI * 2.0));
-  }
+  temp = truncl(angle / (M_PI * 2.0));
 
   temp *= (M_PI * 2.0);
   return angle - temp;
@@ -186,7 +178,7 @@ static const double p[8][2] =
 };
 
 /* sum lunar elp1 series */
-static double sum_series_elp1 (double* t)
+double sum_series_elp1 (double* t)
 {
 	double result = 0;
 	double x,y;
@@ -214,7 +206,7 @@ static double sum_series_elp1 (double* t)
 }
 
 /* sum lunar elp2 series */
-static double sum_series_elp2 (double* t)
+double sum_series_elp2 (double* t)
 {
 	double result = 0;
 	double x,y;
@@ -241,7 +233,7 @@ static double sum_series_elp2 (double* t)
 }
 
 /* sum lunar elp3 series */
-static double sum_series_elp3 (double* t)
+double sum_series_elp3 (double* t)
 {
 	double result = 0;
 	double x,y;
@@ -270,7 +262,7 @@ static double sum_series_elp3 (double* t)
 
 
 /* sum lunar elp4 series */
-static double sum_series_elp4(double *t)
+double sum_series_elp4(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -291,7 +283,7 @@ static double sum_series_elp4(double *t)
 }
 
 /* sum lunar elp5 series */
-static double sum_series_elp5(double *t)
+double sum_series_elp5(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -313,7 +305,7 @@ static double sum_series_elp5(double *t)
 
 
 /* sum lunar elp6 series */
-static double sum_series_elp6(double *t)
+double sum_series_elp6(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -334,7 +326,7 @@ static double sum_series_elp6(double *t)
 }
 
 /* sum lunar elp7 series */
-static double sum_series_elp7(double *t)
+double sum_series_elp7(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -356,7 +348,7 @@ static double sum_series_elp7(double *t)
 }
 
 /* sum lunar elp8 series */
-static double sum_series_elp8(double *t)
+double sum_series_elp8(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -378,7 +370,7 @@ static double sum_series_elp8(double *t)
 }
 
 /* sum lunar elp9 series */
-static double sum_series_elp9(double *t)
+double sum_series_elp9(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -400,7 +392,7 @@ static double sum_series_elp9(double *t)
 }
 
 /* sum lunar elp10 series */
-static double sum_series_elp10(double *t)
+double sum_series_elp10(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -425,7 +417,7 @@ static double sum_series_elp10(double *t)
 }
 
 /* sum lunar elp11 series */
-static double sum_series_elp11(double *t)
+double sum_series_elp11(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -448,7 +440,7 @@ static double sum_series_elp11(double *t)
 }
 
 /* sum lunar elp12 series */
-static double sum_series_elp12(double *t)
+double sum_series_elp12(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -471,7 +463,7 @@ static double sum_series_elp12(double *t)
 }
 
 /* sum lunar elp13 series */
-static double sum_series_elp13(double *t)
+double sum_series_elp13(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -495,7 +487,7 @@ static double sum_series_elp13(double *t)
 }
 
 /* sum lunar elp14 series */
-static double sum_series_elp14(double *t)
+double sum_series_elp14(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -520,7 +512,7 @@ static double sum_series_elp14(double *t)
 
 
 /* sum lunar elp15 series */
-static double sum_series_elp15(double *t)
+double sum_series_elp15(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -544,7 +536,7 @@ static double sum_series_elp15(double *t)
 }
 
 /* sum lunar elp16 series */
-static double sum_series_elp16(double *t)
+double sum_series_elp16(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -565,7 +557,7 @@ static double sum_series_elp16(double *t)
 	return result;
 }
 
-static double sum_series_elp17(double *t)
+double sum_series_elp17(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -586,7 +578,7 @@ static double sum_series_elp17(double *t)
 	return result;
 }
 
-static double sum_series_elp18(double *t)
+double sum_series_elp18(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -607,7 +599,7 @@ static double sum_series_elp18(double *t)
 	return result;
 }
 
-static double sum_series_elp19(double *t)
+double sum_series_elp19(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -629,7 +621,7 @@ static double sum_series_elp19(double *t)
 	return result;
 }
 
-static double sum_series_elp20(double *t)
+double sum_series_elp20(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -651,7 +643,7 @@ static double sum_series_elp20(double *t)
 	return result;
 }
 
-static double sum_series_elp21(double *t)
+double sum_series_elp21(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -674,7 +666,7 @@ static double sum_series_elp21(double *t)
 }
 
 /* sum lunar elp22 series */
-static double sum_series_elp22(double *t)
+double sum_series_elp22(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -695,7 +687,7 @@ static double sum_series_elp22(double *t)
 }
 
 /* sum lunar elp23 series */
-static double sum_series_elp23(double *t)
+double sum_series_elp23(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -716,7 +708,7 @@ static double sum_series_elp23(double *t)
 }
 
 /* sum lunar elp24 series */
-static double sum_series_elp24(double *t)
+double sum_series_elp24(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -737,7 +729,7 @@ static double sum_series_elp24(double *t)
 }
 
 /* sum lunar elp25 series */
-static double sum_series_elp25(double *t)
+double sum_series_elp25(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -759,7 +751,7 @@ static double sum_series_elp25(double *t)
 }
 
 /* sum lunar elp26 series */
-static double sum_series_elp26(double *t)
+double sum_series_elp26(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -781,7 +773,7 @@ static double sum_series_elp26(double *t)
 }
 
 /* sum lunar elp27 series */
-static double sum_series_elp27(double *t)
+double sum_series_elp27(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -803,7 +795,7 @@ static double sum_series_elp27(double *t)
 }
 
 /* sum lunar elp28 series */
-static double sum_series_elp28(double *t)
+double sum_series_elp28(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -824,7 +816,7 @@ static double sum_series_elp28(double *t)
 }
 
 /* sum lunar elp29 series */
-static double sum_series_elp29(double *t)
+double sum_series_elp29(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -846,7 +838,7 @@ static double sum_series_elp29(double *t)
 
 
 /* sum lunar elp30 series */
-static double sum_series_elp30(double *t)
+double sum_series_elp30(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -868,7 +860,7 @@ static double sum_series_elp30(double *t)
 
 
 /* sum lunar elp31 series */
-static double sum_series_elp31(double *t)
+double sum_series_elp31(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -889,7 +881,7 @@ static double sum_series_elp31(double *t)
 }
 
 /* sum lunar elp32 series */
-static double sum_series_elp32(double *t)
+double sum_series_elp32(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -910,7 +902,7 @@ static double sum_series_elp32(double *t)
 }
 
 /* sum lunar elp33 series */
-static double sum_series_elp33(double *t)
+double sum_series_elp33(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -931,7 +923,7 @@ static double sum_series_elp33(double *t)
 }
 
 /* sum lunar elp34 series */
-static double sum_series_elp34(double *t)
+double sum_series_elp34(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -952,7 +944,7 @@ static double sum_series_elp34(double *t)
 	return result;
 }
 /* sum lunar elp35 series */
-static double sum_series_elp35(double *t)
+double sum_series_elp35(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -974,7 +966,7 @@ static double sum_series_elp35(double *t)
 }
 
 /* sum lunar elp36 series */
-static double sum_series_elp36(double *t)
+double sum_series_elp36(double *t)
 {
 	double result = 0;
 	int i,j,k;
@@ -1012,7 +1004,7 @@ static double sum_series_elp36(double *t)
 */
 /* ELP 2000-82B theory */
 double moon[3];
-double* ln_get_lunar_geo_posn (double jd, int fast)
+double* ln_get_lunar_geo_posn (double jd)
 {
 	double ct[5];
 	double elp[36];
@@ -1037,17 +1029,9 @@ double* ln_get_lunar_geo_posn (double jd, int fast)
 	elp[6] = sum_series_elp7(ct);
 	elp[7] = sum_series_elp8(ct);
 	elp[8] = sum_series_elp9(ct);
-
-        // XXX 10,11,12 are very large and take a long time to compute
-        if (fast == 1) {
-          elp[9] = 0.0; //sum_series_elp10(ct);
-          elp[10] = 0.0; //sum_series_elp11(ct);
-          elp[11] = 0.0; //sum_series_elp12(ct);
-        } else {
-          elp[9] = sum_series_elp10(ct);
-          elp[10] = sum_series_elp11(ct);
-          elp[11] = sum_series_elp12(ct);
-        }
+        elp[9] = sum_series_elp10(ct);
+        elp[10] = sum_series_elp11(ct);
+        elp[11] = sum_series_elp12(ct);
 	elp[12] = sum_series_elp13(ct);
 	elp[13] = sum_series_elp14(ct);
 	elp[14] = sum_series_elp15(ct);

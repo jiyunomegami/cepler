@@ -513,9 +513,7 @@
       ;; ELP2000-82 uses julian days (days since 1 January 4713 BC.)
       (let ((m (ln_get_lunar_geo_posn
                 ;; JD
-                (+ (/ *epoch-time* #.(* 24 60 60)) 2451545.0d0)
-                ;; fast
-                1)))
+                (+ (/ *epoch-time* #.(* 24 60 60)) 2451545.0d0))))
         (with-slots (elp-pos elp-vel pos vel acc) obj
           (let* ((s (if *draw-to-scale* 1.0 72.0))
                  (x (* (aref m 0) 1000.0d0 s))
