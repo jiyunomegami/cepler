@@ -1,8 +1,8 @@
 (in-package :cepler)
 
 (defvar *face* nil)
-(defvar *glyphs* (make-hash-table :test #'equal))
-(defvar *glyph-sizes* (make-hash-table :test #'equal))
+(defvar *glyphs* (make-hash-table :test #'eql))
+(defvar *glyph-sizes* (make-hash-table :test #'eql))
 (defparameter *base-glyph-array-size* 128)
 (defvar *glyph-array-size* *base-glyph-array-size*)
 
@@ -73,8 +73,9 @@
              (sampler (sample texture)))
         sampler))))
 
-(defun text-render (face string direction)
-  (let* ((flags (if (or (eq direction :up-down)
+(defun text-render (face text direction)
+  (let* ((string (if (stringp text) text (princ-to-string text)))
+         (flags (if (or (eq direction :up-down)
                         (eq direction :down-up))
                     '(:vertical-layout)
                     '(:default)))
@@ -87,21 +88,19 @@
       (let ((barray (freetype2:bitmap-to-array bitmap)))
         (let ((bh (freetype2::ft-bitmap-rows bitmap))
               (bw (freetype2::ft-bitmap-width bitmap)))
-          (setf (gethash string *glyph-sizes*) (cons (/ bw width) (/ bh height)))
+          (setf (gethash text *glyph-sizes*) (cons (/ bw width) (/ bh height)))
           (case direction
             (:left-right (freetype2::ablit array barray :x x :y y))
             (:right-left (freetype2::ablit array barray :x (+ width x) :y y))
             (:up-down    (freetype2::ablit array barray :x x :y y))
             (:down-up    (freetype2::ablit array barray :x x :y (+ height y))))
           (let ((texture (make-glyph-texture width height array)))
-            (setf (gethash string *glyphs*) texture)))))))
+            (setf (gethash text *glyphs*) texture)))))))
 
 (defun get-glyph (c)
-  (let ((str (princ-to-string c)))
-    (or (gethash str *glyphs*)
-        (when *face*
-          (text-render *face* str :left-right)))))
+  (or (gethash c *glyphs*)
+      (when *face*
+        (text-render *face* c :left-right))))
 
 (defun get-glyph-size (c)
-  (let ((str (princ-to-string c)))
-    (gethash str *glyph-sizes*)))
+  (gethash c *glyph-sizes*))
