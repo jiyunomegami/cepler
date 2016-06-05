@@ -26,7 +26,8 @@
                (:file "sky" :depends-on ("package"))
 
                (:file "vsop87")
-               (:file "planets" :depends-on ("vsop87" "camera"))
+               (:file "elp" :depends-on ("package"))
+               (:file "planets" :depends-on ("vsop87" "elp" "camera"))
 
                (:file "ft")
                (:file "console" :depends-on ("ft" "planets"))

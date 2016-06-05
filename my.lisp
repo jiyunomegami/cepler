@@ -55,6 +55,7 @@
   (push #p"~/lgj/bordeaux-threads/" asdf:*central-registry*)
   (push #p"~/lgj/classimp/" asdf:*central-registry*)
   (push #p"~/lgj/Vacietis/" asdf:*central-registry*)
+  (push #p"~/lgj/Eos/" asdf:*central-registry*)
   ;; (asdf:operate 'asdf:load-op :cffi)
   ;; (asdf:operate 'asdf:load-op :cl-opengl)
   ;; (asdf:operate 'asdf:load-op :cepl)
@@ -64,7 +65,7 @@
   ;; (asdf:operate 'asdf:load-op :cepl.sdl2)
   ;; (asdf:operate 'asdf:load-op :cepl.skitter.sdl2)
   (asdf:operate 'asdf:load-op :cl-alc)
-  ;;(asdf:operate 'asdf:load-op :vacietis)
+  (asdf:operate 'asdf:load-op :vacietis)
   (asdf:operate 'asdf:load-op :cepl)
   )
 
@@ -77,8 +78,7 @@
     (force-output *query-io*)
     (read-line *query-io*))
   (push #p"~/lgj/cepler/" asdf:*central-registry*)
-  (asdf:operate 'asdf:load-op :cepler)
-  (load "vac.lisp"))
+  (asdf:operate 'asdf:load-op :cepler))
 
 (defun load-openal ()
   (ql:quickload "bordeaux-threads")

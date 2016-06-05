@@ -497,8 +497,6 @@
 
 (%init-planets)
 
-(defvar *use-elp* nil)
-
 (defclass elp-body (space-object)
   ((elp-pos
     :initform (make-vector-3)
@@ -513,27 +511,32 @@
                               :radius 1737500d0))
 
 (defmethod compute-forces :around ((obj elp-body) dt)
+  (declare (optimize (speed 3) (debug 0) (safety 1))
+           (type single-float dt))
   (if *use-elp*
       ;; VSOP87 uses millenia (1000 years)
       ;; ELP2000-82 uses julian days (days since 1 January 4713 BC.)
-      (let ((m (ln_get_lunar_geo_posn
-                ;; JD
-                (+ (/ *epoch-time* #.(* 24 60 60)) 2451545.0d0))))
-        (with-slots (elp-pos elp-vel pos vel acc) obj
-          (let* ((s (if *draw-to-scale* 1.0 72.0))
-                 (x (* (aref m 0) 1000.0d0 s))
-                 (y (* (aref m 1) 1000.0d0 s))
-                 (z (* (aref m 2) 1000.0d0 s)))
-            (let* ((earth-pos (slot-value *earth*
-                                          (if *use-vsop*
-                                              'vsop-pos
-                                              'pos)))
-                   (moon-pos (v! (+ x (v:x earth-pos))
-                                 (+ y (v:y earth-pos))
-                                 (+ z (v:z earth-pos)))))
-              (setf elp-pos moon-pos)))
-          (setf elp-vel (mult (/ 1 dt) (sub elp-pos pos)))
-          (setf acc     (mult (/ 1 dt) (sub elp-vel vel)))))
+      (vacietis::with-all-c-saps-pinned
+        (let ((m (cepler.elp:ln_get_lunar_geo_posn
+                  ;; JD
+                  (+ (/ *epoch-time* #.(* 24 60 60)) 2451545.0d0))))
+          (declare (type vacietis::c-sap m))
+          (with-slots (elp-pos elp-vel pos vel acc) obj
+            (let* ((s (if *draw-to-scale* 1.0d0 72.0d0))
+                   (x (* (sb-kernel::sap-ref-double (vacietis::c-sap-sap m)  0) 1000.0d0 s))
+                   (y (* (sb-kernel::sap-ref-double (vacietis::c-sap-sap m)  8) 1000.0d0 s))
+                   (z (* (sb-kernel::sap-ref-double (vacietis::c-sap-sap m) 16) 1000.0d0 s)))
+              (declare (type double-float s x y z))
+              (let* ((earth-pos (slot-value *earth*
+                                            (if *use-vsop*
+                                                'vsop-pos
+                                                'pos)))
+                     (moon-pos (v! (+ x (v:x earth-pos))
+                                   (+ y (v:y earth-pos))
+                                   (+ z (v:z earth-pos)))))
+                (setf elp-pos moon-pos)))
+            (setf elp-vel (mult (/ 1 dt) (sub elp-pos pos)))
+            (setf acc     (mult (/ 1 dt) (sub elp-vel vel))))))
       (call-next-method)))
 
 (defmethod integrate-acc-to-vel :around ((obj elp-body) dt)

@@ -33,7 +33,7 @@
 #include "elp.h"
 
 /* puts a large angle in the correct range 0 - 2PI radians */
-double ln_range_radians(double angle)
+inline double ln_range_radians(double angle)
 {
   double temp;
 
@@ -51,7 +51,7 @@ double ln_range_radians(double angle)
 
 /* puts a large angle in the correct range -2PI - 2PI radians */
 /* preserve sign */
-double ln_range_radians2(double angle)
+inline double ln_range_radians2(double angle)
 {
   double temp;
     
@@ -1004,10 +1004,10 @@ double sum_series_elp36(double *t)
 */
 /* ELP 2000-82B theory */
 double moon[3];
-double* ln_get_lunar_geo_posn (double jd)
-{
 	double ct[5];
 	double elp[36];
+double* ln_get_lunar_geo_posn (double jd)
+{
 	double a,b,c;
 	double x,y,z;
 	double pw,qw, pwqw, pw2, qw2, ra;

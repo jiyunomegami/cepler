@@ -7,5 +7,9 @@
   (:export 
    :start-game))
 
+(in-package :cepler)
+
 (defvar *game-dir*
   (asdf:system-relative-pathname :cepler ""))
+
+(defvar *use-elp* nil)
