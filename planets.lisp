@@ -513,19 +513,22 @@
 (defmethod compute-forces :around ((obj elp-body) dt)
   (declare (optimize (speed 3) (debug 0) (safety 1))
            (type single-float dt))
+  ;;(format t "elp compute-forces~%")
   (if *use-elp*
       ;; VSOP87 uses millenia (1000 years)
       ;; ELP2000-82 uses julian days (days since 1 January 4713 BC.)
-      (vacietis::with-all-c-saps-pinned
+      (vacietis.runtime:with-c ()
+        ;;(format t "with-c ...~%")
         (let ((m (cepler.elp:ln_get_lunar_geo_posn
                   ;; JD
                   (+ (/ *epoch-time* #.(* 24 60 60)) 2451545.0d0))))
-          (declare (type vacietis::c-sap m))
+          (declare (type vacietis::c-pointer m))
+          ;;(format t "c func returned~%")
           (with-slots (elp-pos elp-vel pos vel acc) obj
             (let* ((s (if *draw-to-scale* 1.0d0 72.0d0))
-                   (x (* (sb-kernel::sap-ref-double (vacietis::c-sap-sap m)  0) 1000.0d0 s))
-                   (y (* (sb-kernel::sap-ref-double (vacietis::c-sap-sap m)  8) 1000.0d0 s))
-                   (z (* (sb-kernel::sap-ref-double (vacietis::c-sap-sap m) 16) 1000.0d0 s)))
+                   (x (* (sb-kernel::sap-ref-double (vacietis::c-pointer-sap m)  0) 1000.0d0 s))
+                   (y (* (sb-kernel::sap-ref-double (vacietis::c-pointer-sap m)  8) 1000.0d0 s))
+                   (z (* (sb-kernel::sap-ref-double (vacietis::c-pointer-sap m) 16) 1000.0d0 s)))
               (declare (type double-float s x y z))
               (let* ((earth-pos (slot-value *earth*
                                             (if *use-vsop*

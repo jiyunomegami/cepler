@@ -11,6 +11,7 @@
 (asdf:operate 'asdf:load-op :vacietis)
 
 (setq vacietis::*use-alien-types* t)
+(setq vacietis::*use-pointer-offset* nil)
 (setq vacietis::*debug* nil)
 (setq vacietis::*verbose* t)
 
