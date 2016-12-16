@@ -240,7 +240,7 @@
          (texel (texture tex %tc 1)))
     (v! (s~ texel :xyz) (* (v:w texel) fac))))
 
-(def-g-> draw-sphere () #'sphere-vert #'sphere-frag)
+(def-g-> draw-sphere () (sphere-vert g-pnt) (sphere-frag :vec3 :vec2 :vec3))
 
 
 (defclass light ()
@@ -510,7 +510,7 @@
       ;; cloud shadows
       ((> (v:w c-col) 0.0)
        (let ((w (- 1 (v:w c-col))))
-         ;;(setf cos-ang-incidence (* cos-ang-incidence w)) 
+         ;;(setf cos-ang-incidence (* cos-ang-incidence w))
          (setf col (v! (* (v:x col) w)
                        (* (v:y col) w)
                        (* (v:z col) w)
@@ -533,11 +533,11 @@
        (* col ambient-intensity dummy-cos-ang-incidence)
        (* col ambient-intensity))))
 
-(def-g-> frag-point-light () #'nm-vert #'nm-frag)
-(def-g-> frag-point-light-nonm () #'nm-vert #'nonm-frag)
-(def-g-> frag-point-light-bump () #'nm-vert #'bump-frag)
-(def-g-> frag-point-light-night-bump () #'nm-vert #'night-bump-frag)
-(def-g-> frag-point-light-clouds-bump () #'nm-vert #'clouds-bump-frag)
+(def-g-> frag-point-light () (nm-vert g-pnt) (nm-frag :vec3 :vec3 :vec4 :vec2))
+(def-g-> frag-point-light-nonm () (nm-vert g-pnt) (nonm-frag :vec3 :vec3 :vec4 :vec2))
+(def-g-> frag-point-light-bump () (nm-vert g-pnt) (bump-frag :vec3 :vec3 :vec4 :vec2))
+(def-g-> frag-point-light-night-bump () (nm-vert g-pnt) (night-bump-frag :vec3 :vec3 :vec4 :vec2))
+(def-g-> frag-point-light-clouds-bump () (nm-vert g-pnt) (clouds-bump-frag :vec3 :vec3 :vec4 :vec2))
 
 (defparameter *light-intensity* (v4:*s (v! 1 1 1 0) 1.5))
 ;;(defparameter *ambient-intensity* (v! (v3:*s (v! 1 1 1) 0.01) 1.0))
@@ -689,7 +689,7 @@
                  (* f (v! (* sf (v:x c)) (* sf (v:y c)) (* sf (v:z c)) (* 10 (v:w c)))))
                (* f (v! (s~ (texture tex (* %tc 1)) :xyzw))))))))))
 
-(def-g-> draw-rings () #'rings-vert #'rings-frag)
+(def-g-> draw-rings () (rings-vert g-pnt) (rings-frag :vec3 :vec2 :vec3))
 
 (defun render-rings (gl-planet factor)
   (declare (ignore factor))
@@ -882,8 +882,8 @@
         (add-planet obj-pos))
       (values ray tti p))))
 
-(defun %mouse-callback (event timestamp)
-  (declare (ignore timestamp))
+(defun %mouse-callback (event timestamp tpref)
+  (declare (ignore timestamp tpref))
   (when (and event (not *paused*))
     (when (or (skitter:mouse-down-p 1) (skitter:mouse-down-p 2)) ;; left button is 1 on my system
       (unless *vessel*
@@ -899,8 +899,8 @@
   (unless *targeting*
     (mouse-pov event)))
 
-(defun mouse-callback (event timestamp)
-  (%mouse-callback event timestamp))
+(defun mouse-callback (event timestamp tpref)
+  (%mouse-callback event timestamp tpref))
 
 (defvar *last-followed* nil)
 
@@ -1051,8 +1051,8 @@
 (define-modify-macro multf (s) * "Multiply place by s")
 
 ;; called periodically with a null event
-(defun %keyboard-callback (event timestamp)
-  (declare (ignore timestamp))
+(defun %keyboard-callback (event timestamp tpref)
+  (declare (ignore timestamp tpref))
 
   (unless event
     (when *targeting*
@@ -1315,15 +1315,15 @@
     (format t "fov: ~A~%" (fov *camera*))
     (force-output)))
 
-(defun keyboard-callback (event timestamp)
-  (%keyboard-callback event timestamp))
+(defun keyboard-callback (event timestamp tpref)
+  (%keyboard-callback event timestamp tpref))
 
 (defun %run-loop ()
-  (continuable   
+  (continuable
     (setq *overlay-changed* *scrolling-help*)
     (step-host)
     (update-repl-link)
-    (%keyboard-callback nil nil)
+    (%keyboard-callback nil nil nil)
     (unless *paused*
       (if *was-paused*
           (progn
@@ -1358,20 +1358,20 @@
     (step-gl)
     (fps-limit-delay)))
 
-(defun %window-callback (event timestamp)
-  (declare (ignore timestamp))
+(defun %window-callback (event timestamp tpref)
+  (declare (ignore timestamp tpref))
   (format t "window event: ~S~%" event))
 
-(defun window-callback (event timestamp)
-  (%window-callback event timestamp))
+(defun window-callback (event timestamp tpref)
+  (%window-callback event timestamp tpref))
 
-(defun %quit-callback (event timestamp)
-  (declare (ignore timestamp))
+(defun %quit-callback (event timestamp tpref)
+  (declare (ignore timestamp tpref))
   (format t "quit event: ~S~%" event)
   (stop-loop))
 
-(defun quit-callback (event timestamp)
-  (%quit-callback event timestamp))
+(defun quit-callback (event timestamp tpref)
+  (%quit-callback event timestamp tpref))
 
 (let ((running t))
   (defun run-loop ()
@@ -1398,11 +1398,11 @@
       (sdl2:set-window-fullscreen (current-gl-window) :windowed))
 
     (fps-limit-init)
-    
-    (skitter:whilst-listening-to ((#'window-callback (skitter:window 0) :size)
-                                  (#'quit-callback skitter:+system+ :quitting)
-                                  (#'mouse-callback (skitter:mouse 0) :pos)
-                                  (#'keyboard-callback (skitter:keyboard 0) :button))
+
+    (skitter:whilst-listening-to ((#'window-callback (skitter:window 0) :size nil)
+                                  (#'quit-callback skitter:+system+ :quitting nil)
+                                  (#'mouse-callback (skitter:mouse 0) :pos nil)
+                                  (#'keyboard-callback (skitter:keyboard 0) :button nil))
       (loop :while (and running (not (shutting-down-p))) :do
          (%run-loop)))
     (cepl:quit))
@@ -1427,7 +1427,7 @@
 
 (defvar *loaded-ft* nil)
 
-(defun start-game (&key game-dir (width 1920 width-p) (height 1080))
+(defun start-game (&key game-dir (width 1920 width-p) (height 1080) (gl-version nil))
   (when game-dir
     (setq *game-dir* game-dir))
   (unless width-p
@@ -1448,5 +1448,7 @@
         *rtt-height* height)
   (setq *mouse-x-pos* (floor (/ width 2))
         *mouse-y-pos* (floor (/ height 2)))
-  (cepl:repl width height)
+  (if gl-version
+      (cepl:repl width height gl-version)
+      (cepl:repl width height))
   (run-loop))
