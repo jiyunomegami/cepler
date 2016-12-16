@@ -43,25 +43,25 @@
 (defun-g console-frag ((norm :vec3) (tc :vec2) &uniform (tex :sampler-2d) (fac :float))
   (* fac (v! (s~ (texture tex (* tc 1)) :xyzw))))
 
-(def-g-> draw-console () #'console-vert #'console-frag)
+(def-g-> draw-console () (console-vert g-pnt) (console-frag :vec3 :vec2))
 
 (defun-g rttconsole-vert ((vert g-pnt) &uniform (model->clip :mat4))
   (values
    (* model->clip (v! (pos vert) 1))
    (norm vert)
    (tex vert)))
- 
+
 (defun-g rttconsole-frag ((norm :vec3) (tc :vec2) &uniform (tex :sampler-2d) (fac :float))
   (* fac (v! (s~ (texture tex (v! (v:x tc) (- 1 (v:y tc)))) :xyzw))))
 
-(def-g-> draw-rttconsole () #'rttconsole-vert #'rttconsole-frag)
+(def-g-> draw-rttconsole () (rttconsole-vert g-pnt) (rttconsole-frag :vec3 :vec2))
 
 
 ;;;;;;;;;;;;;; text ;;;;;;;;;;;;;;;;;;;
 
 (defun-g text-vert ((vert g-pnt) &uniform (model->clip :mat4) (size :float))
   (values
-   (* model->clip (v! (pos vert) (/ 1 size))) 
+   (* model->clip (v! (pos vert) (/ 1 size)))
    (norm vert)
    (tex vert)))
 
@@ -83,8 +83,8 @@
         (* fac w))))
 
 (defun-g rtt-text-frag ((norm :vec3) (tc :vec2)
-                        &uniform 
-                        (tex :sampler-2d)   
+                        &uniform
+                        (tex :sampler-2d)
                         (fac :float)
                         (col :vec3))
   (let* ((texel (texture tex tc))
@@ -103,8 +103,8 @@
          (* fac 1.2 (sqrt w))
          0.0 1.0))))
 
-(def-g-> normal-draw-text () #'text-vert #'normal-text-frag)
-(def-g-> rtt-draw-text () #'text-vert #'rtt-text-frag)
+(def-g-> normal-draw-text () (text-vert g-pnt) (normal-text-frag :vec3 :vec2))
+(def-g-> rtt-draw-text () (text-vert g-pnt) (rtt-text-frag :vec3 :vec2))
 
 (defvar *text-data* nil)
 (defvar *text-index* nil)

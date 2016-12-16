@@ -24,7 +24,7 @@
 (defun-g sky-frag ((tc :vec3) &uniform (tex :sampler-cube))
   (texture tex tc))
 
-(def-g-> draw-sky () #'sky-vert #'sky-frag)
+(def-g-> draw-sky () (sky-vert :vec3) (sky-frag :vec3))
 
 (defun render-sky ()
   (when *sky-enabled*
@@ -60,4 +60,3 @@
          "./stars/TychoSkymapII.t3_08192x04096_80_mz.jpg" ;; front
          "./stars/TychoSkymapII.t3_08192x04096_80_pz.jpg" ;; back
          )))
-
